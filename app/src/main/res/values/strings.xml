@@ -1,0 +1,4 @@
+<resources>
+    <string name="app_name">Air Scroll</string>
+    <string name="accessibility_description">AirScroll uses this service to perform scroll gestures system-wide using hand detection.</string>
+</resources>

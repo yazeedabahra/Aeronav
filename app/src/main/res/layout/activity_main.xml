@@ -1,0 +1,182 @@
+<?xml version="1.0" encoding="utf-8"?>
+<ScrollView xmlns:android="http://schemas.android.com/apk/res/android"
+    android:layout_width="match_parent"
+    android:layout_height="match_parent"
+    android:background="@color/dark_bg"
+    android:padding="20dp">
+
+    <LinearLayout
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:orientation="vertical">
+
+        <TextView
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:text="✋ AirScroll"
+            android:textColor="@color/white"
+            android:textSize="32sp"
+            android:textStyle="bold"
+            android:gravity="center"
+            android:layout_marginBottom="8dp" />
+
+        <TextView
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:text="Hand gesture control for any app"
+            android:textColor="#AAAAAA"
+            android:textSize="14sp"
+            android:gravity="center"
+            android:layout_marginBottom="24dp" />
+
+        <!-- Overlay status -->
+        <LinearLayout
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:orientation="horizontal"
+            android:background="@color/card_bg"
+            android:padding="14dp"
+            android:gravity="center_vertical"
+            android:layout_marginBottom="10dp">
+
+            <TextView
+                android:id="@+id/txtOverlayStatus"
+                android:layout_width="0dp"
+                android:layout_height="wrap_content"
+                android:layout_weight="1"
+                android:text="Overlay: ❌"
+                android:textColor="@color/orange"
+                android:textSize="15sp" />
+
+            <Button
+                android:id="@+id/btnOverlay"
+                android:layout_width="wrap_content"
+                android:layout_height="40dp"
+                android:text="ENABLE"
+                android:textSize="12sp" />
+        </LinearLayout>
+
+        <!-- Accessibility status -->
+        <LinearLayout
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:orientation="horizontal"
+            android:background="@color/card_bg"
+            android:padding="14dp"
+            android:gravity="center_vertical"
+            android:layout_marginBottom="10dp">
+
+            <TextView
+                android:id="@+id/txtAccessibilityStatus"
+                android:layout_width="0dp"
+                android:layout_height="wrap_content"
+                android:layout_weight="1"
+                android:text="Accessibility: ❌"
+                android:textColor="@color/orange"
+                android:textSize="15sp" />
+
+            <Button
+                android:id="@+id/btnAccessibility"
+                android:layout_width="wrap_content"
+                android:layout_height="40dp"
+                android:text="ENABLE"
+                android:textSize="12sp" />
+        </LinearLayout>
+
+        <!-- Status -->
+        <TextView
+            android:id="@+id/txtStatus"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:background="@color/card_bg"
+            android:padding="14dp"
+            android:text="Service: Stopped"
+            android:textColor="@color/white"
+            android:textSize="15sp"
+            android:layout_marginBottom="20dp" />
+
+        <!-- START -->
+        <Button
+            android:id="@+id/btnStart"
+            android:layout_width="match_parent"
+            android:layout_height="60dp"
+            android:text="▶  START DETECTION"
+            android:textSize="18sp"
+            android:textStyle="bold"
+            android:backgroundTint="@color/green"
+            android:textColor="@color/white"
+            android:layout_marginBottom="10dp" />
+
+        <!-- RUN IN BACKGROUND -->
+        <Button
+            android:id="@+id/btnRunBackground"
+            android:layout_width="match_parent"
+            android:layout_height="60dp"
+            android:text="🏃  RUN IN BACKGROUND"
+            android:textSize="18sp"
+            android:textStyle="bold"
+            android:backgroundTint="#2196F3"
+            android:textColor="@color/white"
+            android:layout_marginBottom="10dp" />
+
+        <!-- STOP -->
+        <Button
+            android:id="@+id/btnStop"
+            android:layout_width="match_parent"
+            android:layout_height="60dp"
+            android:text="⏹  STOP"
+            android:textSize="18sp"
+            android:textStyle="bold"
+            android:backgroundTint="@color/red"
+            android:textColor="@color/white"
+            android:layout_marginBottom="20dp" />
+
+        <!-- Test buttons -->
+        <LinearLayout
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:orientation="horizontal"
+            android:layout_marginBottom="8dp">
+
+            <Button
+                android:id="@+id/btnTestUp"
+                android:layout_width="0dp"
+                android:layout_height="48dp"
+                android:layout_weight="1"
+                android:text="Test UP"
+                android:backgroundTint="@color/green"
+                android:textColor="@color/white"
+                android:layout_marginEnd="6dp" />
+
+            <Button
+                android:id="@+id/btnTestDown"
+                android:layout_width="0dp"
+                android:layout_height="48dp"
+                android:layout_weight="1"
+                android:text="Test DOWN"
+                android:backgroundTint="@color/purple"
+                android:textColor="@color/white"
+                android:layout_marginStart="6dp" />
+        </LinearLayout>
+
+        <Button
+            android:id="@+id/btnTestTap"
+            android:layout_width="match_parent"
+            android:layout_height="48dp"
+            android:text="Test TAP"
+            android:backgroundTint="@color/orange"
+            android:textColor="@color/white"
+            android:layout_marginBottom="24dp" />
+
+        <!-- Instructions -->
+        <TextView
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:text="HOW TO USE:\n1. Enable Overlay + Accessibility\n2. Tap START or RUN IN BACKGROUND\n3. Switch to any app\n4. Move hand → red dot follows\n5. Pinch → tap\n6. Fingers up + flick down → scroll down\n7. Fingers down + flick up → scroll up"
+            android:textColor="#AAAAAA"
+            android:textSize="13sp"
+            android:lineSpacingExtra="6dp"
+            android:layout_marginBottom="30dp" />
+
+    </LinearLayout>
+</ScrollView>
