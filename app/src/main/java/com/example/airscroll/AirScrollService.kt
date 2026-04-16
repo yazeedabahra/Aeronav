@@ -5,7 +5,6 @@ import android.app.Notification
 import android.app.NotificationChannel
 import android.app.NotificationManager
 import android.app.PendingIntent
-import android.content.Context
 import android.content.Intent
 import android.graphics.Bitmap
 import android.graphics.ImageFormat
@@ -17,36 +16,45 @@ import android.os.Build
 import android.os.Handler
 import android.os.IBinder
 import android.os.Looper
+import android.os.SystemClock
 import android.provider.Settings
 import android.util.Log
 import android.util.Size
 import android.view.Gravity
 import android.view.LayoutInflater
-import android.view.TextureView
 import android.view.View
 import android.view.WindowManager
 import android.widget.FrameLayout
 import androidx.camera.core.CameraSelector
 import androidx.camera.core.ImageAnalysis
+import androidx.camera.core.ImageProxy
 import androidx.camera.core.Preview
-import androidx.camera.core.SurfaceRequest
 import androidx.camera.lifecycle.ProcessCameraProvider
 import androidx.core.content.ContextCompat
 import androidx.lifecycle.LifecycleService
 import com.google.mediapipe.framework.image.BitmapImageBuilder
+import com.google.mediapipe.framework.image.MPImage
 import com.google.mediapipe.tasks.core.BaseOptions
 import com.google.mediapipe.tasks.core.Delegate
 import com.google.mediapipe.tasks.vision.core.RunningMode
 import com.google.mediapipe.tasks.vision.handlandmarker.HandLandmarker
 import com.google.mediapipe.tasks.vision.handlandmarker.HandLandmarkerResult
 import java.io.ByteArrayOutputStream
-import java.nio.ByteBuffer
-import java.util.concurrent.ExecutorService
-import java.util.concurrent.Executors
-import android.os.SystemClock
-import androidx.camera.core.ImageProxy
 
 class AirScrollService : LifecycleService() {
+
+    // -------------------------------------------------------
+    // STATUS LISTENER INTERFACE
+    // Must be a top-level interface inside the class, not local
+    // -------------------------------------------------------
+    interface StatusListener {
+        fun onStatus(
+            handDetected: Boolean,
+            gesture: String,
+            isTapPinching: Boolean,
+            isHoldPinching: Boolean
+        )
+    }
 
     companion object {
         private const val TAG = "AirScrollService"
@@ -56,15 +64,13 @@ class AirScrollService : LifecycleService() {
         var instance: AirScrollService? = null
         var statusListener: StatusListener? = null
 
-        // Intent actions
         const val ACTION_START = "START"
         const val ACTION_STOP = "STOP"
     }
 
-    interface StatusListener {
-        fun onStatus(handDetected: Boolean, gesture: String, isPinching: Boolean)
-    }
-
+    // -------------------------------------------------------
+    // FIELDS
+    // -------------------------------------------------------
     private var windowManager: WindowManager? = null
     private var cameraOverlayView: View? = null
     private var pointerView: View? = null
@@ -72,25 +78,33 @@ class AirScrollService : LifecycleService() {
 
     private var handLandmarker: HandLandmarker? = null
     private val gestureRecognizer = GestureRecognizer()
-    private lateinit var cameraExecutor: ExecutorService
+    private lateinit var cameraExecutor: java.util.concurrent.ExecutorService
     private var cameraProvider: ProcessCameraProvider? = null
 
-    // Pointer state
     private var pointerX = 0f
     private var pointerY = 0f
     var screenWidth = 0
+        private set
     var screenHeight = 0
+        private set
+
     private var isPointerVisible = false
     private var isPointerAdded = false
 
     private val mainHandler = Handler(Looper.getMainLooper())
+    private val smoothAlpha = 0.20f
+    private val deadZone = 3f
+
+    // -------------------------------------------------------
+    // LIFECYCLE
+    // -------------------------------------------------------
 
     override fun onCreate() {
         super.onCreate()
         instance = this
-        Log.d(TAG, "Service onCreate")
+        Log.d(TAG, "onCreate")
 
-        cameraExecutor = Executors.newSingleThreadExecutor()
+        cameraExecutor = java.util.concurrent.Executors.newSingleThreadExecutor()
 
         val metrics = resources.displayMetrics
         screenWidth = metrics.widthPixels
@@ -103,6 +117,7 @@ class AirScrollService : LifecycleService() {
 
     override fun onStartCommand(intent: Intent?, flags: Int, startId: Int): Int {
         super.onStartCommand(intent, flags, startId)
+        Log.d(TAG, "onStartCommand action=${intent?.action}")
 
         when (intent?.action) {
             ACTION_STOP -> {
@@ -110,21 +125,10 @@ class AirScrollService : LifecycleService() {
                 return START_NOT_STICKY
             }
             else -> {
-                // Start foreground immediately
                 startForeground(NOTIFICATION_ID, buildNotification())
-
-                // Setup overlay windows
                 setupOverlayWindows()
-
-                // Init MediaPipe
-                cameraExecutor.execute {
-                    initMediaPipe()
-                }
-
-                // Start camera after short delay to let overlay settle
-                mainHandler.postDelayed({
-                    startCamera()
-                }, 500)
+                cameraExecutor.execute { initMediaPipe() }
+                mainHandler.postDelayed({ startCamera() }, 500)
             }
         }
 
@@ -134,6 +138,37 @@ class AirScrollService : LifecycleService() {
     override fun onBind(intent: Intent): IBinder? {
         super.onBind(intent)
         return null
+    }
+
+    override fun onDestroy() {
+        super.onDestroy()
+        Log.d(TAG, "onDestroy")
+
+        mainHandler.removeCallbacksAndMessages(null)
+
+        try { cameraProvider?.unbindAll() } catch (e: Exception) {
+            Log.e(TAG, "unbind error: ${e.message}")
+        }
+
+        cameraExecutor.shutdown()
+
+        try { handLandmarker?.close() } catch (e: Exception) {
+            Log.e(TAG, "landmarker close error: ${e.message}")
+        }
+
+        try {
+            if (isPointerAdded && pointerView != null) {
+                windowManager?.removeView(pointerView)
+            }
+            if (cameraOverlayView != null) {
+                windowManager?.removeView(cameraOverlayView)
+            }
+        } catch (e: Exception) {
+            Log.e(TAG, "removeView error: ${e.message}")
+        }
+
+        if (instance === this) instance = null
+        statusListener = null
     }
 
     // -------------------------------------------------------
@@ -158,11 +193,9 @@ class AirScrollService : LifecycleService() {
             WindowManager.LayoutParams.TYPE_PHONE
         }
 
-        // 1. Tiny invisible camera preview overlay (1x1 pixel)
-        // This keeps the camera alive when app is in background
-        val cameraOverlayParams = WindowManager.LayoutParams(
-            1,
-            1,
+        // 1x1 invisible camera preview overlay
+        val cameraParams = WindowManager.LayoutParams(
+            1, 1,
             overlayType,
             WindowManager.LayoutParams.FLAG_NOT_FOCUSABLE
                     or WindowManager.LayoutParams.FLAG_NOT_TOUCHABLE
@@ -182,13 +215,13 @@ class AirScrollService : LifecycleService() {
         cameraOverlayView = cameraContainer
 
         try {
-            windowManager?.addView(cameraOverlayView, cameraOverlayParams)
-            Log.d(TAG, "Camera overlay added (1x1 invisible)")
+            windowManager?.addView(cameraOverlayView, cameraParams)
+            Log.d(TAG, "Camera overlay added")
         } catch (e: Exception) {
-            Log.e(TAG, "Failed to add camera overlay: ${e.message}", e)
+            Log.e(TAG, "Camera overlay failed: ${e.message}", e)
         }
 
-        // 2. Pointer overlay (visible red dot)
+        // Visible pointer overlay
         val inflater = LayoutInflater.from(this)
         pointerView = inflater.inflate(R.layout.overlay_pointer, null)
 
@@ -213,7 +246,7 @@ class AirScrollService : LifecycleService() {
             isPointerAdded = true
             Log.d(TAG, "Pointer overlay added")
         } catch (e: Exception) {
-            Log.e(TAG, "Failed to add pointer overlay: ${e.message}", e)
+            Log.e(TAG, "Pointer overlay failed: ${e.message}", e)
         }
     }
 
@@ -225,7 +258,7 @@ class AirScrollService : LifecycleService() {
         try {
             val files = assets.list("") ?: emptyArray()
             if (!files.contains("hand_landmarker.task")) {
-                Log.e(TAG, "hand_landmarker.task not found in assets!")
+                Log.e(TAG, "hand_landmarker.task not found in assets")
                 return
             }
 
@@ -248,7 +281,7 @@ class AirScrollService : LifecycleService() {
                 .build()
 
             handLandmarker = HandLandmarker.createFromOptions(this, options)
-            Log.d(TAG, "HandLandmarker initialized")
+            Log.d(TAG, "HandLandmarker ready")
 
         } catch (e: Exception) {
             Log.e(TAG, "MediaPipe init failed: ${e.message}", e)
@@ -264,7 +297,7 @@ class AirScrollService : LifecycleService() {
             ?.getChildAt(0) as? androidx.camera.view.PreviewView
 
         if (previewView == null) {
-            Log.e(TAG, "PreviewView not found in overlay")
+            Log.e(TAG, "PreviewView not found")
             return
         }
 
@@ -297,7 +330,7 @@ class AirScrollService : LifecycleService() {
                     imageAnalysis
                 )
 
-                Log.d(TAG, "Camera started and bound to service lifecycle")
+                Log.d(TAG, "Camera started")
 
             } catch (e: Exception) {
                 Log.e(TAG, "Camera start failed: ${e.message}", e)
@@ -317,11 +350,11 @@ class AirScrollService : LifecycleService() {
 
             if (bitmap == null) return
 
-            // Rotate and mirror for front camera
             val matrix = Matrix().apply {
                 postRotate(imageProxy.imageInfo.rotationDegrees.toFloat())
                 postScale(-1f, 1f, bitmap.width / 2f, bitmap.height / 2f)
             }
+
             val finalBitmap = Bitmap.createBitmap(
                 bitmap, 0, 0, bitmap.width, bitmap.height, matrix, true
             )
@@ -330,7 +363,7 @@ class AirScrollService : LifecycleService() {
             handLandmarker?.detectAsync(mpImage, frameTime)
 
         } catch (e: Exception) {
-            Log.e(TAG, "Frame processing error: ${e.message}")
+            Log.e(TAG, "Frame error: ${e.message}")
             try { imageProxy.close() } catch (_: Exception) {}
         }
     }
@@ -343,7 +376,7 @@ class AirScrollService : LifecycleService() {
                 else -> yuvToBitmap(imageProxy)
             }
         } catch (e: Exception) {
-            Log.e(TAG, "Bitmap conversion failed: ${e.message}")
+            Log.e(TAG, "Convert error: ${e.message}")
             null
         }
     }
@@ -371,7 +404,6 @@ class AirScrollService : LifecycleService() {
 
             val nv21 = ByteArray(width * height * 3 / 2)
 
-            // Copy Y
             var nv21Index = 0
             for (row in 0 until height) {
                 val srcOffset = row * yRowStride
@@ -381,7 +413,6 @@ class AirScrollService : LifecycleService() {
                 nv21Index += width
             }
 
-            // Copy VU interleaved
             val uvHeight = height / 2
             val uvWidth = width / 2
             for (row in 0 until uvHeight) {
@@ -409,7 +440,7 @@ class AirScrollService : LifecycleService() {
             android.graphics.BitmapFactory.decodeByteArray(bytes, 0, bytes.size)
 
         } catch (e: Exception) {
-            Log.e(TAG, "YUV conversion error: ${e.message}")
+            Log.e(TAG, "YUV error: ${e.message}")
             null
         }
     }
@@ -426,52 +457,68 @@ class AirScrollService : LifecycleService() {
     }
 
     // -------------------------------------------------------
-    // MEDIAPIPE RESULT
+    // MEDIAPIPE RESULT HANDLER
     // -------------------------------------------------------
 
-    private fun onHandLandmarkerResult(result: HandLandmarkerResult, input: com.google.mediapipe.framework.image.MPImage) {
-        val gestureState = gestureRecognizer.processResult(
+    private fun onHandLandmarkerResult(result: HandLandmarkerResult, input: MPImage) {
+        val state = gestureRecognizer.processResult(
             result,
             input.width,
             input.height
         )
 
-        // Update pointer
-        if (gestureState.handDetected) {
-            updatePointer(gestureState.pointerX, gestureState.pointerY)
+        // Pointer
+        if (state.handDetected) {
+            updatePointer(state.pointerX, state.pointerY)
             showPointer()
         } else {
             hidePointer()
         }
 
-        // Scroll gesture
-        if (gestureState.triggeredGesture != null) {
+        // Flick scroll
+        if (state.triggeredGesture != null) {
             AirScrollAccessibilityService.performScroll(
-                gestureState.triggeredGesture.lowercase()
+                state.triggeredGesture.lowercase()
             )
-            Log.d(TAG, "Scroll: ${gestureState.triggeredGesture}")
+            Log.d(TAG, "Scroll: ${state.triggeredGesture}")
         }
 
-        // Tap gesture
-        if (gestureState.triggeredTap) {
+        // Tap — instant, index + thumb
+        if (state.triggeredTap) {
             AirScrollAccessibilityService.performTap(pointerX, pointerY)
+            flashPointer()
             Log.d(TAG, "Tap at ($pointerX, $pointerY)")
         }
 
-        // Notify UI if visible
+        // Hold start — middle + thumb touch
+        if (state.triggeredHoldStart) {
+            AirScrollAccessibilityService.startHold(pointerX, pointerY)
+            Log.d(TAG, "Hold start")
+        }
+
+        // Hold move — dragging
+        if (state.triggeredHoldMove) {
+            AirScrollAccessibilityService.continueHold(pointerX, pointerY)
+        }
+
+        // Hold end — middle + thumb separated
+        if (state.triggeredHoldEnd) {
+            AirScrollAccessibilityService.endHold(pointerX, pointerY)
+            Log.d(TAG, "Hold end")
+        }
+
+        // Notify UI
         statusListener?.onStatus(
-            gestureState.handDetected,
-            gestureState.lastGesture,
-            gestureState.isPinching
+            state.handDetected,
+            state.lastGesture,
+            state.isTapPinching,
+            state.isHoldPinching
         )
     }
 
     // -------------------------------------------------------
     // POINTER CONTROL
     // -------------------------------------------------------
-
-    private val smoothAlpha = 0.20f
-    private val deadZone = 3f
 
     private fun updatePointer(normX: Float, normY: Float) {
         val targetX = normX * screenWidth
@@ -485,14 +532,14 @@ class AirScrollService : LifecycleService() {
             pointerY += dy * smoothAlpha
         }
 
-        val clampedX = pointerX.coerceIn(0f, (screenWidth - 60).toFloat())
-        val clampedY = pointerY.coerceIn(0f, (screenHeight - 60).toFloat())
+        val cx = pointerX.coerceIn(0f, (screenWidth - 60).toFloat())
+        val cy = pointerY.coerceIn(0f, (screenHeight - 60).toFloat())
 
         mainHandler.post {
             try {
                 if (isPointerAdded && isPointerVisible) {
-                    pointerParams?.x = clampedX.toInt()
-                    pointerParams?.y = clampedY.toInt()
+                    pointerParams?.x = cx.toInt()
+                    pointerParams?.y = cy.toInt()
                     windowManager?.updateViewLayout(pointerView, pointerParams)
                 }
             } catch (e: Exception) {
@@ -525,43 +572,17 @@ class AirScrollService : LifecycleService() {
         }
     }
 
-    // -------------------------------------------------------
-    // LIFECYCLE
-    // -------------------------------------------------------
-
-    override fun onDestroy() {
-        super.onDestroy()
-        Log.d(TAG, "Service onDestroy")
-
-        mainHandler.removeCallbacksAndMessages(null)
-
-        try {
-            cameraProvider?.unbindAll()
-        } catch (e: Exception) {
-            Log.e(TAG, "Camera unbind error: ${e.message}")
-        }
-
-        cameraExecutor.shutdown()
-
-        try {
-            handLandmarker?.close()
-        } catch (e: Exception) {
-            Log.e(TAG, "HandLandmarker close error: ${e.message}")
-        }
-
-        try {
-            if (isPointerAdded && pointerView != null) {
-                windowManager?.removeView(pointerView)
+    private fun flashPointer() {
+        mainHandler.post {
+            try {
+                pointerView?.alpha = 0.2f
+                mainHandler.postDelayed({
+                    pointerView?.alpha = 1.0f
+                }, 120)
+            } catch (e: Exception) {
+                Log.e(TAG, "flashPointer error: ${e.message}")
             }
-            if (cameraOverlayView != null) {
-                windowManager?.removeView(cameraOverlayView)
-            }
-        } catch (e: Exception) {
-            Log.e(TAG, "removeView error: ${e.message}")
         }
-
-        if (instance === this) instance = null
-        statusListener = null
     }
 
     // -------------------------------------------------------
@@ -573,10 +594,10 @@ class AirScrollService : LifecycleService() {
             action = ACTION_STOP
         }
         val stopPending = PendingIntent.getService(
-            this, 0, stopIntent, PendingIntent.FLAG_IMMUTABLE
+            this, 0, stopIntent,
+            PendingIntent.FLAG_IMMUTABLE or PendingIntent.FLAG_UPDATE_CURRENT
         )
-
-        val openIntent = PendingIntent.getActivity(
+        val openPending = PendingIntent.getActivity(
             this, 0,
             Intent(this, MainActivity::class.java),
             PendingIntent.FLAG_IMMUTABLE
@@ -585,23 +606,19 @@ class AirScrollService : LifecycleService() {
         return if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
             Notification.Builder(this, CHANNEL_ID)
                 .setContentTitle("AirScroll Running")
-                .setContentText("Hand gestures active — tap to open")
+                .setContentText("Hand gestures active")
                 .setSmallIcon(android.R.drawable.ic_menu_camera)
-                .setContentIntent(openIntent)
-                .addAction(
-                    android.R.drawable.ic_delete,
-                    "Stop",
-                    stopPending
-                )
+                .setContentIntent(openPending)
+                .addAction(android.R.drawable.ic_delete, "Stop", stopPending)
                 .setOngoing(true)
                 .build()
         } else {
             @Suppress("DEPRECATION")
             Notification.Builder(this)
                 .setContentTitle("AirScroll Running")
-                .setContentText("Hand gestures active — tap to open")
+                .setContentText("Hand gestures active")
                 .setSmallIcon(android.R.drawable.ic_menu_camera)
-                .setContentIntent(openIntent)
+                .setContentIntent(openPending)
                 .setOngoing(true)
                 .build()
         }
@@ -613,9 +630,7 @@ class AirScrollService : LifecycleService() {
                 CHANNEL_ID,
                 "AirScroll Service",
                 NotificationManager.IMPORTANCE_LOW
-            ).apply {
-                setShowBadge(false)
-            }
+            ).apply { setShowBadge(false) }
             getSystemService(NotificationManager::class.java)
                 ?.createNotificationChannel(channel)
         }

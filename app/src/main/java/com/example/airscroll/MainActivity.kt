@@ -34,13 +34,26 @@ class MainActivity : AppCompatActivity() {
         private const val OVERLAY_CODE = 101
     }
 
+    // StatusListener with 4 parameters matching AirScrollService.StatusListener
     private val statusListener = object : AirScrollService.StatusListener {
-        override fun onStatus(handDetected: Boolean, gesture: String, isPinching: Boolean) {
+        override fun onStatus(
+            handDetected: Boolean,
+            gesture: String,
+            isTapPinching: Boolean,
+            isHoldPinching: Boolean
+        ) {
             runOnUiThread {
                 val handText = if (handDetected) "✅ Hand detected" else "❌ No hand"
                 val handColor = if (handDetected) Color.GREEN else Color.RED
                 txtStatus.setTextColor(handColor)
-                txtStatus.text = "$handText | Last: $gesture | Pinch: $isPinching"
+
+                val extra = when {
+                    isHoldPinching -> " | 🔒 HOLDING"
+                    isTapPinching  -> " | 🤌 TAP"
+                    else           -> ""
+                }
+
+                txtStatus.text = "$handText | $gesture$extra"
             }
         }
     }
@@ -56,29 +69,26 @@ class MainActivity : AppCompatActivity() {
     override fun onResume() {
         super.onResume()
         updateStatuses()
-        // Register status listener when app is visible
         AirScrollService.statusListener = statusListener
     }
 
     override fun onPause() {
         super.onPause()
-        // Remove UI listener when going background
-        // Service still runs
         AirScrollService.statusListener = null
     }
 
     private fun bindViews() {
-        txtOverlay = findViewById(R.id.txtOverlayStatus)
+        txtOverlay       = findViewById(R.id.txtOverlayStatus)
         txtAccessibility = findViewById(R.id.txtAccessibilityStatus)
-        txtStatus = findViewById(R.id.txtStatus)
-        btnOverlay = findViewById(R.id.btnOverlay)
+        txtStatus        = findViewById(R.id.txtStatus)
+        btnOverlay       = findViewById(R.id.btnOverlay)
         btnAccessibility = findViewById(R.id.btnAccessibility)
-        btnStart = findViewById(R.id.btnStart)
-        btnRunBg = findViewById(R.id.btnRunBackground)
-        btnStop = findViewById(R.id.btnStop)
-        btnTestUp = findViewById(R.id.btnTestUp)
-        btnTestDown = findViewById(R.id.btnTestDown)
-        btnTestTap = findViewById(R.id.btnTestTap)
+        btnStart         = findViewById(R.id.btnStart)
+        btnRunBg         = findViewById(R.id.btnRunBackground)
+        btnStop          = findViewById(R.id.btnStop)
+        btnTestUp        = findViewById(R.id.btnTestUp)
+        btnTestDown      = findViewById(R.id.btnTestDown)
+        btnTestTap       = findViewById(R.id.btnTestTap)
     }
 
     private fun setupButtons() {
@@ -88,7 +98,8 @@ class MainActivity : AppCompatActivity() {
                     Intent(
                         Settings.ACTION_MANAGE_OVERLAY_PERMISSION,
                         Uri.parse("package:$packageName")
-                    ), OVERLAY_CODE
+                    ),
+                    OVERLAY_CODE
                 )
             }
         }
@@ -120,7 +131,6 @@ class MainActivity : AppCompatActivity() {
                 return@setOnClickListener
             }
             startAirScroll()
-            // Go to home screen
             val home = Intent(Intent.ACTION_MAIN).apply {
                 addCategory(Intent.CATEGORY_HOME)
                 flags = Intent.FLAG_ACTIVITY_NEW_TASK
@@ -136,12 +146,12 @@ class MainActivity : AppCompatActivity() {
 
         btnTestUp.setOnClickListener {
             val ok = AirScrollAccessibilityService.performScroll("up")
-            toast(if (ok) "✅ Scroll UP" else "❌ Enable accessibility")
+            toast(if (ok) "✅ Scroll UP" else "❌ Enable accessibility first")
         }
 
         btnTestDown.setOnClickListener {
             val ok = AirScrollAccessibilityService.performScroll("down")
-            toast(if (ok) "✅ Scroll DOWN" else "❌ Enable accessibility")
+            toast(if (ok) "✅ Scroll DOWN" else "❌ Enable accessibility first")
         }
 
         btnTestTap.setOnClickListener {
@@ -151,7 +161,7 @@ class MainActivity : AppCompatActivity() {
                     service.screenWidth / 2f,
                     service.screenHeight / 2f
                 )
-                toast(if (ok) "✅ Tap center" else "❌ Enable accessibility")
+                toast(if (ok) "✅ Tap center" else "❌ Enable accessibility first")
             } else {
                 toast("Start AirScroll first")
             }
@@ -170,10 +180,9 @@ class MainActivity : AppCompatActivity() {
     }
 
     private fun stopAirScroll() {
-        val intent = Intent(this, AirScrollService::class.java).apply {
+        startService(Intent(this, AirScrollService::class.java).apply {
             action = AirScrollService.ACTION_STOP
-        }
-        startService(intent)
+        })
     }
 
     private fun requestPermissions() {
@@ -186,7 +195,9 @@ class MainActivity : AppCompatActivity() {
             ContextCompat.checkSelfPermission(this, it) != PackageManager.PERMISSION_GRANTED
         }
         if (needed.isNotEmpty()) {
-            ActivityCompat.requestPermissions(this, needed.toTypedArray(), CAMERA_CODE)
+            ActivityCompat.requestPermissions(
+                this, needed.toTypedArray(), CAMERA_CODE
+            )
         }
     }
 
@@ -199,21 +210,25 @@ class MainActivity : AppCompatActivity() {
             Settings.canDrawOverlays(this)
         else true
 
-    private fun hasAccessibility() = AirScrollAccessibilityService.isEnabled()
-
     private fun updateStatuses() {
         val ov = hasOverlay()
-        txtOverlay.text = if (ov) "Overlay: ✅" else "Overlay: ❌ — tap ENABLE"
-        txtOverlay.setTextColor(if (ov) Color.GREEN else Color.parseColor("#FF9800"))
+        txtOverlay.text =
+            if (ov) "Overlay: ✅ Enabled" else "Overlay: ❌ — tap ENABLE"
+        txtOverlay.setTextColor(
+            if (ov) Color.GREEN else Color.parseColor("#FF9800")
+        )
         btnOverlay.text = if (ov) "SETTINGS" else "ENABLE"
 
-        val ac = hasAccessibility()
-        txtAccessibility.text = if (ac) "Accessibility: ✅" else "Accessibility: ❌ — tap ENABLE"
-        txtAccessibility.setTextColor(if (ac) Color.GREEN else Color.parseColor("#FF9800"))
+        val ac = AirScrollAccessibilityService.isEnabled()
+        txtAccessibility.text =
+            if (ac) "Accessibility: ✅ Enabled" else "Accessibility: ❌ — tap ENABLE"
+        txtAccessibility.setTextColor(
+            if (ac) Color.GREEN else Color.parseColor("#FF9800")
+        )
         btnAccessibility.text = if (ac) "SETTINGS" else "ENABLE"
 
         val running = AirScrollService.instance != null
-        txtStatus.text = if (running) "Service: Running" else "Service: Stopped"
+        txtStatus.text = if (running) "Service: ✅ Running" else "Service: Stopped"
         txtStatus.setTextColor(if (running) Color.GREEN else Color.GRAY)
     }
 
