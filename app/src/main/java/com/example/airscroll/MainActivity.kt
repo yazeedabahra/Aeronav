@@ -40,24 +40,30 @@ class MainActivity : AppCompatActivity() {
             handDetected: Boolean,
             gesture: String,
             isTapPinching: Boolean,
-            isHoldPinching: Boolean
+            isGestureMode: Boolean,
+            debugInfo: String
         ) {
             runOnUiThread {
-                val handText = if (handDetected) "✅ Hand detected" else "❌ No hand"
+                val handText  = if (handDetected) "✅ Hand" else "❌ No hand"
                 val handColor = if (handDetected) Color.GREEN else Color.RED
                 txtStatus.setTextColor(handColor)
 
-                val extra = when {
-                    isHoldPinching -> " | 🔒 HOLDING"
-                    isTapPinching  -> " | 🤌 TAP"
-                    else           -> ""
+                val modeText = when {
+                    isGestureMode && isTapPinching -> "🤌 TAP | 🔍 Gesture mode"
+                    isGestureMode -> "🔍 Gesture mode — show L-shape"
+                    isTapPinching -> "🤌 TAP"
+                    else          -> ""
                 }
 
-                txtStatus.text = "$handText | $gesture$extra"
+                txtStatus.text = buildString {
+                    append(handText)
+                    append(" | $gesture")
+                    if (modeText.isNotEmpty()) append("\n$modeText")
+                    append("\n$debugInfo")
+                }
             }
         }
     }
-
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
         setContentView(R.layout.activity_main)

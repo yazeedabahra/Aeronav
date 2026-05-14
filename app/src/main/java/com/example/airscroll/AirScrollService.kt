@@ -52,7 +52,8 @@ class AirScrollService : LifecycleService() {
             handDetected: Boolean,
             gesture: String,
             isTapPinching: Boolean,
-            isHoldPinching: Boolean
+            isGestureMode: Boolean,
+            debugInfo: String
         )
     }
 
@@ -467,7 +468,7 @@ class AirScrollService : LifecycleService() {
             input.height
         )
 
-        // Pointer
+        // Pointer — always update
         if (state.handDetected) {
             updatePointer(state.pointerX, state.pointerY)
             showPointer()
@@ -475,36 +476,49 @@ class AirScrollService : LifecycleService() {
             hidePointer()
         }
 
-        // Flick scroll
+        // L-shape triggered gesture
         if (state.triggeredGesture != null) {
-            AirScrollAccessibilityService.performScroll(
-                state.triggeredGesture.lowercase()
-            )
-            Log.d(TAG, "Scroll: ${state.triggeredGesture}")
+            when (state.triggeredGesture) {
+                "UP" -> {
+                    AirScrollAccessibilityService.performScroll("up")
+                    Log.d(TAG, "L-shape: SCROLL UP")
+                }
+                "DOWN" -> {
+                    AirScrollAccessibilityService.performScroll("down")
+                    Log.d(TAG, "L-shape: SCROLL DOWN")
+                }
+                "LEFT" -> {
+                    AirScrollAccessibilityService.performBack()
+                    Log.d(TAG, "L-shape: GO BACK / LEFT")
+                }
+                "RIGHT" -> {
+                    AirScrollAccessibilityService.performScroll("down")
+                    Log.d(TAG, "L-shape: GO RIGHT")
+                }
+            }
         }
 
-        // Tap — instant, index + thumb
+        // Tap — index + thumb pinch
         if (state.triggeredTap) {
             AirScrollAccessibilityService.performTap(pointerX, pointerY)
             flashPointer()
             Log.d(TAG, "Tap at ($pointerX, $pointerY)")
         }
 
-        // Hold start — middle + thumb touch
-        if (state.triggeredHoldStart) {
-            AirScrollAccessibilityService.startHold(pointerX, pointerY)
-            Log.d(TAG, "Hold start")
-        }
-
-        // Hold move — dragging
-        if (state.triggeredHoldMove) {
-            AirScrollAccessibilityService.continueHold(pointerX, pointerY)
-        }
-
-        // Hold end — middle + thumb separated
-        if (state.triggeredHoldEnd) {
-            AirScrollAccessibilityService.endHold(pointerX, pointerY)
-            Log.d(TAG, "Hold end")
+        // Visual feedback
+        when (state.mode) {
+            GestureRecognizer.Mode.FIST -> {
+                setPointerColor(android.graphics.Color.YELLOW)
+            }
+            GestureRecognizer.Mode.L_DETECT -> {
+                setPointerColor(android.graphics.Color.CYAN)
+            }
+            GestureRecognizer.Mode.COOLDOWN -> {
+                setPointerColor(android.graphics.Color.GREEN)
+            }
+            else -> {
+                setPointerColor(android.graphics.Color.TRANSPARENT)
+            }
         }
 
         // Notify UI
@@ -512,8 +526,26 @@ class AirScrollService : LifecycleService() {
             state.handDetected,
             state.lastGesture,
             state.isTapPinching,
-            state.isHoldPinching
+            state.mode == GestureRecognizer.Mode.FIST || state.mode == GestureRecognizer.Mode.L_DETECT,
+            state.debugInfo
         )
+    }
+
+    private fun showLShapeIndicator() {
+        mainHandler.post {
+            try {
+                // Change pointer color to blue while drawing L-shape
+                pointerView?.setBackgroundColor(android.graphics.Color.BLUE)
+            } catch (e: Exception) { }
+        }
+    }
+
+    private fun hideLShapeIndicator() {
+        mainHandler.post {
+            try {
+                pointerView?.setBackgroundColor(android.graphics.Color.TRANSPARENT)
+            } catch (e: Exception) { }
+        }
     }
 
     // -------------------------------------------------------
@@ -581,6 +613,25 @@ class AirScrollService : LifecycleService() {
                 }, 120)
             } catch (e: Exception) {
                 Log.e(TAG, "flashPointer error: ${e.message}")
+            }
+        }
+    }
+
+    private fun setPointerColor(color: Int) {
+        mainHandler.post {
+            try {
+                val inner = pointerView?.findViewById<View>(R.id.innerDot)
+                if (color == android.graphics.Color.TRANSPARENT) {
+                    // Reset to default red
+                    inner?.setBackgroundResource(R.drawable.pointer_inner)
+                } else {
+                    val drawable = android.graphics.drawable.GradientDrawable()
+                    drawable.shape = android.graphics.drawable.GradientDrawable.OVAL
+                    drawable.setColor(color)
+                    inner?.background = drawable
+                }
+            } catch (e: Exception) {
+                Log.e(TAG, "setPointerColor error: ${e.message}")
             }
         }
     }
