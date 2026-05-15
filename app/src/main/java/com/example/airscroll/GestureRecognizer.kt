@@ -2,96 +2,69 @@ package com.example.airscroll
 
 import com.google.mediapipe.tasks.components.containers.NormalizedLandmark
 import com.google.mediapipe.tasks.vision.handlandmarker.HandLandmarkerResult
-import kotlin.math.abs
 import kotlin.math.hypot
 
 class GestureRecognizer {
-
-    // -------------------------------------------------------
-    // STATES
-    // -------------------------------------------------------
-    // POINTER  — normal mode, pointer follows hand
-    // FIST     — fist detected, waiting for L-shape
-    // L_DETECT — L-shape detected, classify direction
-    // COOLDOWN — gesture fired, wait before next
-
-    enum class Mode {
-        POINTER,
-        FIST,
-        L_DETECT,
-        COOLDOWN
-    }
 
     data class GestureState(
         val handDetected: Boolean = false,
         val pointerX: Float = 0.5f,
         val pointerY: Float = 0.5f,
+
+        // Hand info
+        val handedness: String = "Unknown",
+        val fingersUp: Int = 0,
+        val isPointerMode: Boolean = false,
         val isTapPinching: Boolean = false,
-        val mode: Mode = Mode.POINTER,
-        val lShapeDirection: String? = null,
+
+        // Gesture mode
+        val gestureArmed: Boolean = false,
+        val gestureDirection: String? = null,
+
+        // Results
         val lastGesture: String = "None",
         val gestureCount: Int = 0,
         val triggeredGesture: String? = null,
         val triggeredTap: Boolean = false,
-        val showFistNotification: Boolean = false,
-        val showLShapeDetected: Boolean = false,
+
+        // Debug
         val debugInfo: String = ""
     )
 
     companion object {
-        // Tap: index + thumb
+        // Tap: index + thumb pinch
         private const val TAP_PINCH_THRESHOLD = 0.06f
         private const val TAP_COOLDOWN_MS     = 400L
 
-        // Fist detection
-        // All fingertips must be within this distance of palm center
-        private const val FIST_MAX_FINGER_DIST = 0.12f
+        // Finger extended: tip must be this much farther from wrist than MCP
+        private const val EXTENDED_RATIO = 1.4f
 
-        // L-shape detection
-        // Index and thumb must be extended beyond this ratio
-        private const val L_EXTENDED_RATIO = 1.5f
+        // Finger curled: tip must be closer to wrist than this ratio of MCP distance
+        private const val CURLED_RATIO = 1.2f
 
-        // Other fingers must be curled (tip close to MCP)
-        private const val L_CURLED_RATIO = 1.2f
-
-        // Direction detection: minimum extension in pixels (normalized)
-        private const val MIN_DIRECTION_LENGTH = 0.08f
-
-        // How long fist must be held before entering gesture mode
-        private const val FIST_HOLD_MS = 400L
-
-        // How long L-shape must be held to confirm direction
-        private const val L_CONFIRM_MS = 300L
+        // How long the finger gesture must be held to fire
+        // Make gesture faster to trigger
+        private const val GESTURE_CONFIRM_MS = 400L      // lower = faster
 
         // Cooldown after gesture fires
-        private const val GESTURE_COOLDOWN_MS = 1200L
+        private const val GESTURE_COOLDOWN_MS = 1000L     // lower = faster repeat
 
-        // How long to stay in L_DETECT before timeout back to POINTER
-        private const val L_TIMEOUT_MS = 2000L
+        // Open hand = pointer mode (4+ fingers extended)
+        private const val POINTER_MIN_FINGERS = 4
     }
 
     // -------------------------------------------------------
     // STATE
     // -------------------------------------------------------
 
-    private var mode: Mode = Mode.POINTER
-
     // Tap
     private var wasTapPinching = false
     private var lastTapTime    = 0L
 
-    // Fist
-    private var fistStartTime   = 0L
-    private var fistConfirmed   = false
-
-    // L-shape
-    private var lShapeStartTime      = 0L
-    private var lShapeDirection: String? = null
-    private var lShapeConfirmed      = false
-    private var lShapeConfirmStartMs = 0L
-
-    // Cooldown
-    private var cooldownStartTime = 0L
+    // Finger gesture
+    private var currentGestureDirection: String? = null
+    private var gestureStartTime = 0L
+    private var lastGestureTriggerTime = 0L
 
     // Results
     private var lastGesture  = "None"
@@ -102,24 +75,14 @@ class GestureRecognizer {
     private var smoothPointerY = 0.5f
     private val pointerAlpha   = 0.20f
 
-    // -------------------------------------------------------
-    // RESET
-    // -------------------------------------------------------
-
     fun reset() {
-        mode              = Mode.POINTER
-        wasTapPinching    = false
-        fistStartTime     = 0L
-        fistConfirmed     = false
-        lShapeStartTime   = 0L
-        lShapeDirection   = null
-        lShapeConfirmed   = false
-        lShapeConfirmStartMs = 0L
-        cooldownStartTime = 0L
+        wasTapPinching = false
+        currentGestureDirection = null
+        gestureStartTime = 0L
     }
 
     // -------------------------------------------------------
-    // MAIN ENTRY POINT
+    // MAIN
     // -------------------------------------------------------
 
     fun processResult(
@@ -142,7 +105,18 @@ class GestureRecognizer {
         val h   = imageHeight.toFloat()
         val now = System.currentTimeMillis()
 
-        // --- Always update pointer ---
+        // --- Handedness ---
+        // MediaPipe returns handedness from camera perspective
+        // Since we flip the image, "Left" from MediaPipe = user's Left hand
+        val handedness = if (result.handednesses().isNotEmpty() &&
+            result.handednesses()[0].isNotEmpty()
+        ) {
+            result.handednesses()[0][0].categoryName() ?: "Unknown"
+        } else {
+            "Unknown"
+        }
+
+        // --- Pointer position ---
         val rawPX = listOf(0, 5, 9, 13, 17)
             .map { landmarks[it].x() }.average().toFloat()
         val rawPY = listOf(0, 5, 9, 13, 17)
@@ -151,14 +125,24 @@ class GestureRecognizer {
         smoothPointerX = pointerAlpha * rawPX + (1f - pointerAlpha) * smoothPointerX
         smoothPointerY = pointerAlpha * rawPY + (1f - pointerAlpha) * smoothPointerY
 
-        // --- Always check tap (index + thumb) ---
+        // --- Finger analysis ---
+        val thumbUp  = isThumbExtended(landmarks, w, h)
+        val indexUp  = isFingerExtended(landmarks, 8, 6, 5, w, h)
+        val middleUp = isFingerExtended(landmarks, 12, 10, 9, w, h)
+        val ringUp   = isFingerExtended(landmarks, 16, 14, 13, w, h)
+        val pinkyUp  = isFingerExtended(landmarks, 20, 18, 17, w, h)
+
+        val fingersUp = listOf(indexUp, middleUp, ringUp, pinkyUp).count { it }
+        val totalUp   = fingersUp + if (thumbUp) 1 else 0
+
+        // --- Tap: index + thumb pinch ---
         val thumbTip = landmarks[4]
         val indexTip = landmarks[8]
         val tapDist  = hypot(thumbTip.x() - indexTip.x(), thumbTip.y() - indexTip.y())
         val tapPinching = tapDist < TAP_PINCH_THRESHOLD
 
         var triggeredTap = false
-        if (mode == Mode.POINTER && tapPinching && !wasTapPinching) {
+        if (tapPinching && !wasTapPinching) {
             if (now - lastTapTime >= TAP_COOLDOWN_MS) {
                 triggeredTap = true
                 lastTapTime  = now
@@ -168,264 +152,209 @@ class GestureRecognizer {
         }
         wasTapPinching = tapPinching
 
-        // --- Detect hand poses ---
-        val isFist   = detectFist(landmarks, w, h)
-        val lResult  = detectLShape(landmarks, w, h)
-        val isLShape = lResult != null
+        // --- Pointer mode: open hand (4+ fingers up) ---
+        val isPointerMode = totalUp >= POINTER_MIN_FINGERS
 
-        // --- State machine ---
+        // --- Finger gesture detection ---
+        // Only detect when NOT in pointer mode and NOT tapping
         var triggeredGesture: String? = null
-        var showFistNotification = false
-        var showLShapeDetected   = false
-        var debugInfo = "Mode: $mode"
+        var gestureArmed = false
+        var gestureDirection: String? = null
 
-        when (mode) {
+        if (!isPointerMode && !tapPinching) {
+            val detectedDirection = classifyFingerGesture(
+                handedness = handedness,
+                indexUp    = indexUp,
+                middleUp   = middleUp,
+                ringUp     = ringUp,
+                pinkyUp    = pinkyUp,
+                thumbUp    = thumbUp
+            )
 
-            Mode.POINTER -> {
-                if (isFist) {
-                    if (fistStartTime == 0L) {
-                        fistStartTime = now
-                    }
-                    if (now - fistStartTime >= FIST_HOLD_MS) {
-                        mode          = Mode.FIST
-                        fistConfirmed = true
-                        showFistNotification = true
-                        debugInfo = "FIST detected — show gesture now"
-                    }
-                } else {
-                    fistStartTime = 0L
-                }
-            }
+            if (detectedDirection != null) {
+                gestureDirection = detectedDirection
+                gestureArmed     = true
 
-            Mode.FIST -> {
-                showFistNotification = true
-                debugInfo = "Waiting for L-shape..."
-
-                if (isLShape) {
-                    mode             = Mode.L_DETECT
-                    lShapeStartTime  = now
-                    lShapeDirection  = lResult
-                    lShapeConfirmed  = false
-                    lShapeConfirmStartMs = now
-                    debugInfo = "L-shape detected: $lResult"
-                }
-
-                // If hand opens fully (not fist and not L) go back to pointer
-                if (!isFist && !isLShape) {
-                    // Give a small grace period
-                    if (fistStartTime == 0L) fistStartTime = now
-                    if (now - fistStartTime > 500L) {
-                        mode = Mode.POINTER
-                        fistStartTime = 0L
-                        fistConfirmed = false
-                    }
-                } else {
-                    fistStartTime = now
-                }
-            }
-
-            Mode.L_DETECT -> {
-                showLShapeDetected = true
-                debugInfo = "L: ${lShapeDirection ?: "?"}"
-
-                if (isLShape && lResult != null) {
-                    // Direction matches — confirm after hold time
-                    if (lResult == lShapeDirection) {
-                        if (now - lShapeConfirmStartMs >= L_CONFIRM_MS) {
-                            // FIRE!
-                            triggeredGesture = lShapeDirection
-                            lastGesture      = lShapeDirection ?: "None"
+                if (detectedDirection == currentGestureDirection) {
+                    // Same gesture held — check if confirm time reached
+                    if (now - gestureStartTime >= GESTURE_CONFIRM_MS) {
+                        // Check cooldown
+                        if (now - lastGestureTriggerTime >= GESTURE_COOLDOWN_MS) {
+                            triggeredGesture       = detectedDirection
+                            lastGesture            = detectedDirection
                             gestureCount++
-                            mode = Mode.COOLDOWN
-                            cooldownStartTime = now
-                            debugInfo = "GESTURE FIRED: $lShapeDirection"
+                            lastGestureTriggerTime = now
+                            // Reset so it doesn't fire again immediately
+                            currentGestureDirection = null
+                            gestureStartTime        = 0L
                         }
-                    } else {
-                        // Direction changed — update
-                        lShapeDirection      = lResult
-                        lShapeConfirmStartMs = now
                     }
                 } else {
-                    // L-shape lost
-                    if (now - lShapeStartTime > L_TIMEOUT_MS) {
-                        mode = Mode.POINTER
-                        debugInfo = "L-shape timeout"
-                    }
-                    // Reset confirm timer
-                    lShapeConfirmStartMs = now
+                    // New gesture direction — start timer
+                    currentGestureDirection = detectedDirection
+                    gestureStartTime        = now
                 }
+            } else {
+                // No valid gesture — reset
+                currentGestureDirection = null
+                gestureStartTime        = 0L
             }
-
-            Mode.COOLDOWN -> {
-                debugInfo = "Cooldown..."
-                if (now - cooldownStartTime >= GESTURE_COOLDOWN_MS) {
-                    mode = Mode.POINTER
-                    fistStartTime   = 0L
-                    fistConfirmed   = false
-                    lShapeDirection = null
-                }
-            }
+        } else {
+            // In pointer mode or tapping — reset gesture
+            currentGestureDirection = null
+            gestureStartTime        = 0L
         }
 
+        // --- Debug ---
+        val fingerStr = buildString {
+            if (thumbUp)  append("T")
+            if (indexUp)  append("I")
+            if (middleUp) append("M")
+            if (ringUp)   append("R")
+            if (pinkyUp)  append("P")
+            if (isEmpty()) append("FIST")
+        }
+
+        // Display corrected handedness (swap because MediaPipe reports from camera perspective)
+        val displayHand = when (handedness) {
+            "Left"  -> "Right"
+            "Right" -> "Left"
+            else    -> handedness
+        }
+
+        val debugInfo = "$displayHand hand | Fingers: $fingerStr ($totalUp) | " +
+                "${if (gestureArmed) "Armed: $gestureDirection" else "Idle"}"
+
         return GestureState(
-            handDetected         = true,
-            pointerX             = smoothPointerX,
-            pointerY             = smoothPointerY,
-            isTapPinching        = tapPinching,
-            mode                 = mode,
-            lShapeDirection      = lShapeDirection,
-            lastGesture          = lastGesture,
-            gestureCount         = gestureCount,
-            triggeredGesture     = triggeredGesture,
-            triggeredTap         = triggeredTap,
-            showFistNotification = showFistNotification,
-            showLShapeDetected   = showLShapeDetected,
-            debugInfo            = debugInfo
+            handDetected     = true,
+            pointerX         = smoothPointerX,
+            pointerY         = smoothPointerY,
+            handedness       = handedness,
+            fingersUp        = totalUp,
+            isPointerMode    = isPointerMode,
+            isTapPinching    = tapPinching,
+            gestureArmed     = gestureArmed,
+            gestureDirection = gestureDirection,
+            lastGesture      = lastGesture,
+            gestureCount     = gestureCount,
+            triggeredGesture = triggeredGesture,
+            triggeredTap     = triggeredTap,
+            debugInfo        = debugInfo
         )
     }
 
     // -------------------------------------------------------
-    // FIST DETECTOR
+    // FINGER GESTURE CLASSIFIER
     //
-    // All 4 fingertips (index, middle, ring, pinky) must be
-    // close to palm center. Thumb can be anywhere.
+    // Right hand:
+    //   Index only         → SCROLL UP
+    //   Index + Middle     → SCROLL DOWN
+    //
+    // Left hand:
+    //   Index only         → SCROLL LEFT
+    //   Index + Middle     → SCROLL RIGHT
+    //
+    // Requirements:
+    //   - Only the specified fingers should be extended
+    //   - Ring and Pinky must be curled
+    //   - Thumb can be in any position (ignored)
     // -------------------------------------------------------
 
-    private fun detectFist(
-        landmarks: List<NormalizedLandmark>,
-        w: Float,
-        h: Float
-    ): Boolean {
-        val wrist = landmarks[0]
-
-        // Palm center = average of wrist + 4 MCP joints
-        val palmX = listOf(0, 5, 9, 13, 17).map { landmarks[it].x() }.average().toFloat()
-        val palmY = listOf(0, 5, 9, 13, 17).map { landmarks[it].y() }.average().toFloat()
-
-        // All 4 fingertips must be close to palm center
-        val fingerTips = listOf(8, 12, 16, 20)
-
-        var closedCount = 0
-        for (tipIdx in fingerTips) {
-            val tip  = landmarks[tipIdx]
-            val dist = hypot(tip.x() - palmX, tip.y() - palmY)
-            if (dist < FIST_MAX_FINGER_DIST) {
-                closedCount++
-            }
-        }
-
-        // Thumb tip must also be close
-        val thumbDist = hypot(landmarks[4].x() - palmX, landmarks[4].y() - palmY)
-        val thumbClosed = thumbDist < FIST_MAX_FINGER_DIST * 1.3f
-
-        return closedCount >= 4 && thumbClosed
-    }
-
-    // -------------------------------------------------------
-    // L-SHAPE DETECTOR
-    //
-    // Conditions:
-    // 1. Index finger extended (tip far from wrist)
-    // 2. Thumb extended (tip far from wrist)
-    // 3. Middle, Ring, Pinky all curled (tip close to MCP)
-    //
-    // Then determine directions of index and thumb
-    // and classify the gesture.
-    // -------------------------------------------------------
-
-    private fun detectLShape(
-        landmarks: List<NormalizedLandmark>,
-        w: Float,
-        h: Float
+    private fun classifyFingerGesture(
+        handedness: String,
+        indexUp: Boolean,
+        middleUp: Boolean,
+        ringUp: Boolean,
+        pinkyUp: Boolean,
+        thumbUp: Boolean
     ): String? {
-        val wrist = landmarks[0]
 
-        // --- Check index is extended ---
-        val indexTip = landmarks[8]
-        val indexMcp = landmarks[5]
-        val indexTipDist = dist(wrist, indexTip, w, h)
-        val indexMcpDist = dist(wrist, indexMcp, w, h)
-        val indexExtended = indexTipDist > indexMcpDist * L_EXTENDED_RATIO
+        // Ring and pinky must be DOWN for gesture detection
+        if (ringUp || pinkyUp) return null
 
-        // --- Check thumb is extended ---
-        val thumbTip = landmarks[4]
-        val thumbMcp = landmarks[2]
-        val thumbTipDist = dist(wrist, thumbTip, w, h)
-        val thumbMcpDist = dist(wrist, thumbMcp, w, h)
-        val thumbExtended = thumbTipDist > thumbMcpDist * L_EXTENDED_RATIO
+        // One finger: index only
+        val oneFingerUp = indexUp && !middleUp
 
-        // --- Check middle, ring, pinky are curled ---
-        val middleCurled = isFingerCurled(landmarks, 12, 9, w, h)
-        val ringCurled   = isFingerCurled(landmarks, 16, 13, w, h)
-        val pinkyCurled  = isFingerCurled(landmarks, 20, 17, w, h)
+        // Two fingers: index + middle
+        val twoFingersUp = indexUp && middleUp
 
-        val othersCurled = middleCurled && ringCurled && pinkyCurled
+        if (!oneFingerUp && !twoFingersUp) return null
 
-        if (!indexExtended || !thumbExtended || !othersCurled) {
-            return null
-        }
-
-        // --- Determine index direction ---
-        // Vector from index MCP to index tip
-        val indexDx = indexTip.x() - indexMcp.x()
-        val indexDy = indexTip.y() - indexMcp.y()
-        val indexDir = getDominantDirection(indexDx, indexDy)
-
-        // --- Determine thumb direction ---
-        // Vector from thumb MCP to thumb tip
-        val thumbDx = thumbTip.x() - thumbMcp.x()
-        val thumbDy = thumbTip.y() - thumbMcp.y()
-        val thumbDir = getDominantDirection(thumbDx, thumbDy)
-
-        // Make sure both have enough length
-        val indexLen = hypot(indexDx, indexDy)
-        val thumbLen = hypot(thumbDx, thumbDy)
-        if (indexLen < MIN_DIRECTION_LENGTH || thumbLen < MIN_DIRECTION_LENGTH) {
-            return null
-        }
-
-        // Must be perpendicular (one horizontal, one vertical)
-        if (!arePerpendicular(indexDir, thumbDir)) {
-            return null
-        }
-
-        // --- Classify based on index direction ---
-        // Index determines the scroll/navigation direction
-        return when (indexDir) {
-            "UP"    -> "UP"
-            "DOWN"  -> "DOWN"
-            "LEFT"  -> "LEFT"
-            "RIGHT" -> "RIGHT"
-            else    -> null
+        return when (handedness) {
+            "Left" -> {
+                when {
+                    oneFingerUp  -> "UP"
+                    twoFingersUp -> "DOWN"
+                    else         -> null
+                }
+            }
+            "Right" -> {
+                when {
+                    oneFingerUp  -> "LEFT"
+                    twoFingersUp -> "RIGHT"
+                    else         -> null
+                }
+            }
+            else -> null
         }
     }
 
-    private fun isFingerCurled(
+    // -------------------------------------------------------
+    // FINGER EXTENDED DETECTION
+    //
+    // A finger is extended if:
+    //   - tip is farther from wrist than PIP joint
+    //   - tip Y is above PIP Y (for vertical check)
+    //
+    // Uses tip vs PIP comparison which is more reliable
+    // than tip vs MCP for detecting extended vs curled
+    // -------------------------------------------------------
+
+    private fun isFingerExtended(
         landmarks: List<NormalizedLandmark>,
         tipIdx: Int,
+        pipIdx: Int,
         mcpIdx: Int,
         w: Float,
         h: Float
     ): Boolean {
         val wrist = landmarks[0]
-        val tipDist = dist(wrist, landmarks[tipIdx], w, h)
-        val mcpDist = dist(wrist, landmarks[mcpIdx], w, h)
-        return tipDist < mcpDist * L_CURLED_RATIO
+        val tip   = landmarks[tipIdx]
+        val pip   = landmarks[pipIdx]
+        val mcp   = landmarks[mcpIdx]
+
+        val tipDist = dist(wrist, tip, w, h)
+        val mcpDist = dist(wrist, mcp, w, h)
+
+        // Tip must be significantly farther from wrist than MCP
+        if (tipDist < mcpDist * EXTENDED_RATIO) return false
+
+        // Additional check: tip must be farther from wrist than PIP
+        val pipDist = dist(wrist, pip, w, h)
+        return tipDist > pipDist
     }
 
-    private fun getDominantDirection(dx: Float, dy: Float): String {
-        return if (abs(dx) > abs(dy)) {
-            if (dx > 0) "RIGHT" else "LEFT"
-        } else {
-            if (dy > 0) "DOWN" else "UP"
-        }
-    }
+    // -------------------------------------------------------
+    // THUMB EXTENDED DETECTION
+    //
+    // Thumb is special — it moves sideways, not up/down
+    // Check if thumb tip is far enough from palm center
+    // -------------------------------------------------------
 
-    private fun arePerpendicular(dir1: String, dir2: String): Boolean {
-        val horizontal = setOf("LEFT", "RIGHT")
-        val vertical   = setOf("UP", "DOWN")
-        return (dir1 in horizontal && dir2 in vertical) ||
-                (dir1 in vertical   && dir2 in horizontal)
+    private fun isThumbExtended(
+        landmarks: List<NormalizedLandmark>,
+        w: Float,
+        h: Float
+    ): Boolean {
+        val wrist    = landmarks[0]
+        val thumbTip = landmarks[4]
+        val thumbIp  = landmarks[3]
+        val thumbMcp = landmarks[2]
+
+        val tipDist = dist(wrist, thumbTip, w, h)
+        val mcpDist = dist(wrist, thumbMcp, w, h)
+
+        return tipDist > mcpDist * 1.3f
     }
 
     private fun dist(

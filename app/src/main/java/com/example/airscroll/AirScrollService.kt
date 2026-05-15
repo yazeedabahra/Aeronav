@@ -468,65 +468,66 @@ class AirScrollService : LifecycleService() {
             input.height
         )
 
-        // Pointer — always update
+        // Pointer — only move when in pointer mode (open hand)
         if (state.handDetected) {
-            updatePointer(state.pointerX, state.pointerY)
-            showPointer()
+            if (state.isPointerMode) {
+                updatePointer(state.pointerX, state.pointerY)
+                showPointer()
+                setPointerColor(android.graphics.Color.TRANSPARENT)
+            } else if (state.gestureArmed) {
+                showPointer()
+                val color = when (state.gestureDirection) {
+                    "UP"    -> android.graphics.Color.GREEN
+                    "DOWN"  -> android.graphics.Color.parseColor("#9C27B0")
+                    "LEFT"  -> android.graphics.Color.CYAN
+                    "RIGHT" -> android.graphics.Color.YELLOW
+                    else    -> android.graphics.Color.RED
+                }
+                setPointerColor(color)
+            } else {
+                showPointer()
+                setPointerColor(android.graphics.Color.TRANSPARENT)
+            }
         } else {
             hidePointer()
         }
 
-        // L-shape triggered gesture
+        // Scroll / navigate gesture — ALL use swipe gestures now
         if (state.triggeredGesture != null) {
             when (state.triggeredGesture) {
                 "UP" -> {
                     AirScrollAccessibilityService.performScroll("up")
-                    Log.d(TAG, "L-shape: SCROLL UP")
+                    Log.d(TAG, "SCROLL UP")
                 }
                 "DOWN" -> {
                     AirScrollAccessibilityService.performScroll("down")
-                    Log.d(TAG, "L-shape: SCROLL DOWN")
+                    Log.d(TAG, "SCROLL DOWN")
                 }
                 "LEFT" -> {
-                    AirScrollAccessibilityService.performBack()
-                    Log.d(TAG, "L-shape: GO BACK / LEFT")
+                    AirScrollAccessibilityService.performScroll("left")
+                    Log.d(TAG, "SWIPE LEFT")
                 }
                 "RIGHT" -> {
-                    AirScrollAccessibilityService.performScroll("down")
-                    Log.d(TAG, "L-shape: GO RIGHT")
+                    AirScrollAccessibilityService.performScroll("right")
+                    Log.d(TAG, "SWIPE RIGHT")
                 }
             }
+            flashPointer()
         }
 
-        // Tap — index + thumb pinch
+        // Tap
         if (state.triggeredTap) {
             AirScrollAccessibilityService.performTap(pointerX, pointerY)
             flashPointer()
             Log.d(TAG, "Tap at ($pointerX, $pointerY)")
         }
 
-        // Visual feedback
-        when (state.mode) {
-            GestureRecognizer.Mode.FIST -> {
-                setPointerColor(android.graphics.Color.YELLOW)
-            }
-            GestureRecognizer.Mode.L_DETECT -> {
-                setPointerColor(android.graphics.Color.CYAN)
-            }
-            GestureRecognizer.Mode.COOLDOWN -> {
-                setPointerColor(android.graphics.Color.GREEN)
-            }
-            else -> {
-                setPointerColor(android.graphics.Color.TRANSPARENT)
-            }
-        }
-
-        // Notify UI
+        // UI update
         statusListener?.onStatus(
             state.handDetected,
             state.lastGesture,
             state.isTapPinching,
-            state.mode == GestureRecognizer.Mode.FIST || state.mode == GestureRecognizer.Mode.L_DETECT,
+            state.gestureArmed,
             state.debugInfo
         )
     }

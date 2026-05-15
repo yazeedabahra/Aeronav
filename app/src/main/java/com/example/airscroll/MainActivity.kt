@@ -35,6 +35,7 @@ class MainActivity : AppCompatActivity() {
     }
 
     // StatusListener with 4 parameters matching AirScrollService.StatusListener
+
     private val statusListener = object : AirScrollService.StatusListener {
         override fun onStatus(
             handDetected: Boolean,
@@ -49,21 +50,21 @@ class MainActivity : AppCompatActivity() {
                 txtStatus.setTextColor(handColor)
 
                 val modeText = when {
-                    isGestureMode && isTapPinching -> "🤌 TAP | 🔍 Gesture mode"
-                    isGestureMode -> "🔍 Gesture mode — show L-shape"
+                    isTapPinching && isGestureMode -> "🤌 TAP + 🎯 Gesture armed"
+                    isGestureMode -> "🎯 Gesture armed"
                     isTapPinching -> "🤌 TAP"
-                    else          -> ""
+                    else          -> "👆 Pointer mode"
                 }
 
                 txtStatus.text = buildString {
-                    append(handText)
-                    append(" | $gesture")
-                    if (modeText.isNotEmpty()) append("\n$modeText")
+                    append("$handText | Last: $gesture")
+                    append("\n$modeText")
                     append("\n$debugInfo")
                 }
             }
         }
     }
+
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
         setContentView(R.layout.activity_main)

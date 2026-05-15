@@ -5,7 +5,6 @@ import android.accessibilityservice.GestureDescription
 import android.graphics.Path
 import android.util.Log
 import android.view.accessibility.AccessibilityEvent
-import android.view.accessibility.AccessibilityNodeInfo
 
 class AirScrollAccessibilityService : AccessibilityService() {
 
@@ -42,71 +41,71 @@ class AirScrollAccessibilityService : AccessibilityService() {
     }
 
     // -------------------------------------------------------
-    // SCROLL
+    // SCROLL — always uses swipe gesture
+    // This works on ALL apps including Instagram Reels,
+    // YouTube Shorts, TikTok, home screen, everything
     // -------------------------------------------------------
 
     fun doScroll(direction: String): Boolean {
-        val action = when (direction.lowercase()) {
-            "up"   -> AccessibilityNodeInfo.ACTION_SCROLL_BACKWARD
-            "down" -> AccessibilityNodeInfo.ACTION_SCROLL_FORWARD
-            else   -> return false
-        }
+        val metrics = resources.displayMetrics
+        val screenW = metrics.widthPixels.toFloat()
+        val screenH = metrics.heightPixels.toFloat()
 
-        val root = rootInActiveWindow ?: return fallbackSwipeScroll(direction)
+        val centerX = screenW / 2f
 
-        val scrolled = findAndScroll(root, action)
-        root.recycle()
+        // Vertical scroll points
+        val topY    = screenH * 0.25f
+        val bottomY = screenH * 0.75f
 
-        return if (scrolled) {
-            Log.d(TAG, "Node scroll $direction succeeded")
-            true
-        } else {
-            Log.d(TAG, "Node scroll failed, falling back to swipe")
-            fallbackSwipeScroll(direction)
-        }
-    }
-
-    private fun findAndScroll(node: AccessibilityNodeInfo, action: Int): Boolean {
-        if (node.isScrollable) {
-            val result = node.performAction(action)
-            if (result) return true
-        }
-
-        for (i in 0 until node.childCount) {
-            val child = node.getChild(i) ?: continue
-            val result = findAndScroll(child, action)
-            child.recycle()
-            if (result) return true
-        }
-
-        return false
-    }
-
-    private fun fallbackSwipeScroll(direction: String): Boolean {
-        val m   = resources.displayMetrics
-        val cx  = m.widthPixels / 2f
-        val top = m.heightPixels * 0.30f
-        val bot = m.heightPixels * 0.70f
+        // Horizontal scroll points
+        val leftX  = screenW * 0.20f
+        val rightX = screenW * 0.80f
+        val midY   = screenH / 2f
 
         val path = Path()
+
         when (direction.lowercase()) {
-            "up"   -> { path.moveTo(cx, bot); path.lineTo(cx, top) }
-            "down" -> { path.moveTo(cx, top); path.lineTo(cx, bot) }
-            else   -> return false
+            "up" -> {
+                // Swipe from bottom to top = scroll up / next content up
+                path.moveTo(centerX, bottomY)
+                path.lineTo(centerX, topY)
+            }
+            "down" -> {
+                // Swipe from top to bottom = scroll down / next content down
+                path.moveTo(centerX, topY)
+                path.lineTo(centerX, bottomY)
+            }
+            "left" -> {
+                // Swipe from right to left = scroll left / go back
+                path.moveTo(rightX, midY)
+                path.lineTo(leftX, midY)
+            }
+            "right" -> {
+                // Swipe from left to right = scroll right / go forward
+                path.moveTo(leftX, midY)
+                path.lineTo(rightX, midY)
+            }
+            else -> return false
         }
 
-        val stroke  = GestureDescription.StrokeDescription(path, 0L, 300L)
+        // Duration: 250ms feels natural for a swipe
+        // Too fast = might not register in some apps
+        // Too slow = feels laggy
+        val stroke = GestureDescription.StrokeDescription(path, 0L, 250L)
         val gesture = GestureDescription.Builder().addStroke(stroke).build()
 
         return dispatchGesture(gesture, object : GestureResultCallback() {
             override fun onCompleted(g: GestureDescription?) {
-                Log.d(TAG, "Fallback swipe $direction done")
+                Log.d(TAG, "Scroll $direction completed")
+            }
+            override fun onCancelled(g: GestureDescription?) {
+                Log.d(TAG, "Scroll $direction cancelled")
             }
         }, null)
     }
 
     // -------------------------------------------------------
-    // TAP
+    // TAP — short quick tap
     // -------------------------------------------------------
 
     fun doTap(x: Float, y: Float): Boolean {
@@ -120,13 +119,13 @@ class AirScrollAccessibilityService : AccessibilityService() {
 
         return dispatchGesture(gesture, object : GestureResultCallback() {
             override fun onCompleted(g: GestureDescription?) {
-                Log.d(TAG, "Tap done at ($x, $y)")
+                Log.d(TAG, "Tap at ($x, $y) completed")
             }
         }, null)
     }
 
     // -------------------------------------------------------
-    // BACK
+    // BACK — system back button
     // -------------------------------------------------------
 
     fun doBack(): Boolean {
