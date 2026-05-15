@@ -128,6 +128,10 @@ class AirScrollService : LifecycleService() {
             else -> {
                 startForeground(NOTIFICATION_ID, buildNotification())
                 setupOverlayWindows()
+                // Hide any existing pointer from previous session
+                forceHidePointer()
+                // Reset gesture recognizer
+                gestureRecognizer.reset()
                 cameraExecutor.execute { initMediaPipe() }
                 mainHandler.postDelayed({ startCamera() }, 500)
             }
@@ -144,6 +148,12 @@ class AirScrollService : LifecycleService() {
     override fun onDestroy() {
         super.onDestroy()
         Log.d(TAG, "onDestroy")
+
+        // Immediately hide pointer
+        try {
+            pointerView?.visibility = View.GONE
+            isPointerVisible = false
+        } catch (e: Exception) { }
 
         mainHandler.removeCallbacksAndMessages(null)
 
@@ -248,6 +258,29 @@ class AirScrollService : LifecycleService() {
             Log.d(TAG, "Pointer overlay added")
         } catch (e: Exception) {
             Log.e(TAG, "Pointer overlay failed: ${e.message}", e)
+        }
+    }
+
+
+
+    // -------------------------------------------------------
+    // HIDING THE POINTER
+    // -------------------------------------------------------
+
+    fun forceHidePointer() {
+        mainHandler.post {
+            try {
+                pointerView?.visibility = View.GONE
+                isPointerVisible = false
+                pointerX = screenWidth / 2f
+                pointerY = screenHeight / 2f
+                // Also reset pointer color to default
+                val inner = pointerView?.findViewById<View>(R.id.innerDot)
+                inner?.setBackgroundResource(R.drawable.pointer_inner)
+                Log.d(TAG, "Pointer force hidden and reset")
+            } catch (e: Exception) {
+                Log.e(TAG, "forceHidePointer error: ${e.message}")
+            }
         }
     }
 
@@ -490,6 +523,9 @@ class AirScrollService : LifecycleService() {
             }
         } else {
             hidePointer()
+            // Reset pointer position to center so old position doesn't linger
+            pointerX = screenWidth / 2f
+            pointerY = screenHeight / 2f
         }
 
         // Scroll / navigate gesture — ALL use swipe gestures now

@@ -124,8 +124,15 @@ class MainActivity : AppCompatActivity() {
                 toast("Overlay permission required")
                 return@setOnClickListener
             }
+
+            // Check if already running
+            if (AirScrollService.instance != null) {
+                toast("⚡ AirScroll is already running")
+                return@setOnClickListener
+            }
+
             startAirScroll()
-            toast("AirScroll started")
+            toast("✅ AirScroll started")
         }
 
         btnRunBg.setOnClickListener {
@@ -137,18 +144,43 @@ class MainActivity : AppCompatActivity() {
                 toast("Overlay permission required")
                 return@setOnClickListener
             }
-            startAirScroll()
-            val home = Intent(Intent.ACTION_MAIN).apply {
-                addCategory(Intent.CATEGORY_HOME)
-                flags = Intent.FLAG_ACTIVITY_NEW_TASK
+
+            // Check if already running
+            if (AirScrollService.instance != null) {
+                toast("⚡ Already running — going to background")
+                AirScrollService.instance?.forceHidePointer()
+                android.os.Handler(android.os.Looper.getMainLooper()).postDelayed({
+                    val home = Intent(Intent.ACTION_MAIN).apply {
+                        addCategory(Intent.CATEGORY_HOME)
+                        flags = Intent.FLAG_ACTIVITY_NEW_TASK
+                    }
+                    startActivity(home)
+                }, 300)
+                return@setOnClickListener
             }
-            startActivity(home)
-            toast("AirScroll running in background")
+
+            AirScrollService.instance?.forceHidePointer()
+            startAirScroll()
+            android.os.Handler(android.os.Looper.getMainLooper()).postDelayed({
+                val home = Intent(Intent.ACTION_MAIN).apply {
+                    addCategory(Intent.CATEGORY_HOME)
+                    flags = Intent.FLAG_ACTIVITY_NEW_TASK
+                }
+                startActivity(home)
+            }, 300)
+            toast("✅ AirScroll running in background")
         }
 
         btnStop.setOnClickListener {
+            // Check if running
+            if (AirScrollService.instance == null) {
+                toast("❌ AirScroll is not running")
+                return@setOnClickListener
+            }
+
+            AirScrollService.instance?.forceHidePointer()
             stopAirScroll()
-            toast("AirScroll stopped")
+            toast("⏹ AirScroll stopped")
         }
 
         btnTestUp.setOnClickListener {
