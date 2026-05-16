@@ -127,12 +127,12 @@ class MainActivity : AppCompatActivity() {
 
             // Check if already running
             if (AirScrollService.instance != null) {
-                toast("⚡ AirScroll is already running")
+                toast("⚡ AeroNav is already running")
                 return@setOnClickListener
             }
 
             startAirScroll()
-            toast("✅ AirScroll started")
+            toast("✅ AeroNav started")
         }
 
         btnRunBg.setOnClickListener {
@@ -168,19 +168,19 @@ class MainActivity : AppCompatActivity() {
                 }
                 startActivity(home)
             }, 300)
-            toast("✅ AirScroll running in background")
+            toast("✅ AeroNav running in background")
         }
 
         btnStop.setOnClickListener {
             // Check if running
             if (AirScrollService.instance == null) {
-                toast("❌ AirScroll is not running")
+                toast("❌ AeroNav is not running")
                 return@setOnClickListener
             }
 
             AirScrollService.instance?.forceHidePointer()
             stopAirScroll()
-            toast("⏹ AirScroll stopped")
+            toast("⏹ AeroNav stopped")
         }
 
         btnTestUp.setOnClickListener {
@@ -202,7 +202,7 @@ class MainActivity : AppCompatActivity() {
                 )
                 toast(if (ok) "✅ Tap center" else "❌ Enable accessibility first")
             } else {
-                toast("Start AirScroll first")
+                toast("Start AeroNav first")
             }
         }
     }

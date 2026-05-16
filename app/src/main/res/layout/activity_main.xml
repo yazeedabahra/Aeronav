@@ -2,136 +2,205 @@
 <ScrollView xmlns:android="http://schemas.android.com/apk/res/android"
     android:layout_width="match_parent"
     android:layout_height="match_parent"
-    android:background="@color/dark_bg"
-    android:padding="20dp">
+    android:background="@color/bg_primary"
+    android:fillViewport="true">
 
     <LinearLayout
         android:layout_width="match_parent"
         android:layout_height="wrap_content"
-        android:orientation="vertical">
+        android:orientation="vertical"
+        android:padding="20dp">
+
+        <!-- ============================================ -->
+        <!-- HEADER -->
+        <!-- ============================================ -->
+
+        <LinearLayout
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:orientation="vertical"
+            android:gravity="center"
+            android:layout_marginBottom="24dp"
+            android:layout_marginTop="12dp">
+
+            <TextView
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:text="✈️"
+                android:textSize="42sp"
+                android:layout_marginBottom="8dp" />
+
+            <TextView
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:text="AeroNav"
+                android:textColor="@color/text_primary"
+                android:textSize="32sp"
+                android:textStyle="bold"
+                android:letterSpacing="0.05" />
+
+            <TextView
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:text="Touchless hand gesture navigation"
+                android:textColor="@color/text_secondary"
+                android:textSize="14sp"
+                android:layout_marginTop="4dp" />
+
+        </LinearLayout>
+
+        <!-- ============================================ -->
+        <!-- PERMISSIONS SECTION -->
+        <!-- ============================================ -->
 
         <TextView
             android:layout_width="match_parent"
             android:layout_height="wrap_content"
-            android:text="✋ AirScroll"
-            android:textColor="@color/white"
-            android:textSize="32sp"
+            android:text="SETUP"
+            android:textColor="@color/text_dim"
+            android:textSize="12sp"
             android:textStyle="bold"
-            android:gravity="center"
+            android:letterSpacing="0.1"
             android:layout_marginBottom="8dp" />
 
-        <TextView
-            android:layout_width="match_parent"
-            android:layout_height="wrap_content"
-            android:text="Hand gesture control for any app"
-            android:textColor="#AAAAAA"
-            android:textSize="14sp"
-            android:gravity="center"
-            android:layout_marginBottom="24dp" />
-
-        <!-- Overlay status -->
+        <!-- Overlay Permission -->
         <LinearLayout
             android:layout_width="match_parent"
             android:layout_height="wrap_content"
             android:orientation="horizontal"
-            android:background="@color/card_bg"
+            android:background="@color/bg_card"
             android:padding="14dp"
             android:gravity="center_vertical"
-            android:layout_marginBottom="10dp">
+            android:layout_marginBottom="6dp">
 
             <TextView
-                android:id="@+id/txtOverlayStatus"
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:text="🔲"
+                android:textSize="20sp"
+                android:layout_marginEnd="12dp" />
+
+            <LinearLayout
                 android:layout_width="0dp"
                 android:layout_height="wrap_content"
                 android:layout_weight="1"
-                android:text="Overlay: ❌"
-                android:textColor="@color/orange"
-                android:textSize="15sp" />
+                android:orientation="vertical">
+
+                <TextView
+                    android:layout_width="wrap_content"
+                    android:layout_height="wrap_content"
+                    android:text="Overlay"
+                    android:textColor="@color/text_primary"
+                    android:textSize="15sp" />
+
+                <TextView
+                    android:id="@+id/txtOverlayStatus"
+                    android:layout_width="wrap_content"
+                    android:layout_height="wrap_content"
+                    android:text="Not enabled"
+                    android:textColor="@color/accent_orange"
+                    android:textSize="12sp" />
+
+            </LinearLayout>
 
             <Button
                 android:id="@+id/btnOverlay"
                 android:layout_width="wrap_content"
-                android:layout_height="40dp"
-                android:text="ENABLE"
-                android:textSize="12sp" />
+                android:layout_height="36dp"
+                android:text="Enable"
+                android:textSize="12sp"
+                android:backgroundTint="@color/blue_btn"
+                android:textColor="@color/white" />
+
         </LinearLayout>
 
-        <!-- Accessibility status -->
+        <!-- Accessibility Permission -->
         <LinearLayout
             android:layout_width="match_parent"
             android:layout_height="wrap_content"
             android:orientation="horizontal"
-            android:background="@color/card_bg"
+            android:background="@color/bg_card"
             android:padding="14dp"
             android:gravity="center_vertical"
-            android:layout_marginBottom="10dp">
+            android:layout_marginBottom="16dp">
 
             <TextView
-                android:id="@+id/txtAccessibilityStatus"
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:text="♿"
+                android:textSize="20sp"
+                android:layout_marginEnd="12dp" />
+
+            <LinearLayout
                 android:layout_width="0dp"
                 android:layout_height="wrap_content"
                 android:layout_weight="1"
-                android:text="Accessibility: ❌"
-                android:textColor="@color/orange"
-                android:textSize="15sp" />
+                android:orientation="vertical">
+
+                <TextView
+                    android:layout_width="wrap_content"
+                    android:layout_height="wrap_content"
+                    android:text="Accessibility"
+                    android:textColor="@color/text_primary"
+                    android:textSize="15sp" />
+
+                <TextView
+                    android:id="@+id/txtAccessibilityStatus"
+                    android:layout_width="wrap_content"
+                    android:layout_height="wrap_content"
+                    android:text="Not enabled"
+                    android:textColor="@color/accent_orange"
+                    android:textSize="12sp" />
+
+            </LinearLayout>
 
             <Button
                 android:id="@+id/btnAccessibility"
                 android:layout_width="wrap_content"
-                android:layout_height="40dp"
-                android:text="ENABLE"
-                android:textSize="12sp" />
+                android:layout_height="36dp"
+                android:text="Enable"
+                android:textSize="12sp"
+                android:backgroundTint="@color/blue_btn"
+                android:textColor="@color/white" />
+
         </LinearLayout>
 
-        <!-- Status -->
+        <!-- ============================================ -->
+        <!-- CONTROLS SECTION -->
+        <!-- ============================================ -->
+
         <TextView
-            android:id="@+id/txtStatus"
             android:layout_width="match_parent"
             android:layout_height="wrap_content"
-            android:background="@color/card_bg"
-            android:padding="14dp"
-            android:text="Service: Stopped"
-            android:textColor="@color/white"
-            android:textSize="15sp"
-            android:layout_marginBottom="20dp" />
-
-        <!-- START -->
-        <Button
-            android:id="@+id/btnStart"
-            android:layout_width="match_parent"
-            android:layout_height="60dp"
-            android:text="▶  START DETECTION"
-            android:textSize="18sp"
+            android:text="CONTROLS"
+            android:textColor="@color/text_dim"
+            android:textSize="12sp"
             android:textStyle="bold"
-            android:backgroundTint="@color/green"
-            android:textColor="@color/white"
-            android:layout_marginBottom="10dp" />
+            android:letterSpacing="0.1"
+            android:layout_marginBottom="8dp" />
 
-        <!-- RUN IN BACKGROUND -->
-        <Button
-            android:id="@+id/btnRunBackground"
+        <!-- Status Display -->
+        <LinearLayout
             android:layout_width="match_parent"
-            android:layout_height="60dp"
-            android:text="🏃  RUN IN BACKGROUND"
-            android:textSize="18sp"
-            android:textStyle="bold"
-            android:backgroundTint="#2196F3"
-            android:textColor="@color/white"
-            android:layout_marginBottom="10dp" />
+            android:layout_height="wrap_content"
+            android:background="@color/bg_card"
+            android:padding="16dp"
+            android:orientation="vertical"
+            android:layout_marginBottom="12dp">
 
-        <!-- STOP -->
-        <Button
-            android:id="@+id/btnStop"
-            android:layout_width="match_parent"
-            android:layout_height="60dp"
-            android:text="⏹  STOP"
-            android:textSize="18sp"
-            android:textStyle="bold"
-            android:backgroundTint="@color/red"
-            android:textColor="@color/white"
-            android:layout_marginBottom="20dp" />
+            <TextView
+                android:id="@+id/txtStatus"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:text="Not running"
+                android:textColor="@color/text_secondary"
+                android:textSize="14sp"
+                android:fontFamily="monospace"
+                android:lineSpacingExtra="4dp" />
 
-        <!-- Test buttons -->
+        </LinearLayout>
+
+        <!-- Main Buttons -->
         <LinearLayout
             android:layout_width="match_parent"
             android:layout_height="wrap_content"
@@ -139,44 +208,576 @@
             android:layout_marginBottom="8dp">
 
             <Button
+                android:id="@+id/btnStart"
+                android:layout_width="0dp"
+                android:layout_height="56dp"
+                android:layout_weight="1"
+                android:text="▶  Start"
+                android:textSize="15sp"
+                android:textStyle="bold"
+                android:backgroundTint="@color/accent_green"
+                android:textColor="@color/black"
+                android:layout_marginEnd="4dp" />
+
+            <Button
+                android:id="@+id/btnStop"
+                android:layout_width="0dp"
+                android:layout_height="56dp"
+                android:layout_weight="1"
+                android:text="⏹  Stop"
+                android:textSize="15sp"
+                android:textStyle="bold"
+                android:backgroundTint="@color/accent_red"
+                android:textColor="@color/white"
+                android:layout_marginStart="4dp" />
+
+        </LinearLayout>
+
+        <Button
+            android:id="@+id/btnRunBackground"
+            android:layout_width="match_parent"
+            android:layout_height="56dp"
+            android:text="🚀  Run in Background"
+            android:textSize="15sp"
+            android:textStyle="bold"
+            android:backgroundTint="@color/blue_btn"
+            android:textColor="@color/white"
+            android:layout_marginBottom="8dp" />
+
+        <!-- Test Buttons -->
+        <LinearLayout
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:orientation="horizontal"
+            android:layout_marginBottom="24dp">
+
+            <Button
                 android:id="@+id/btnTestUp"
                 android:layout_width="0dp"
-                android:layout_height="48dp"
+                android:layout_height="42dp"
                 android:layout_weight="1"
-                android:text="Test UP"
-                android:backgroundTint="@color/green"
-                android:textColor="@color/white"
-                android:layout_marginEnd="6dp" />
+                android:text="↑ Test"
+                android:textSize="12sp"
+                android:backgroundTint="@color/bg_card_light"
+                android:textColor="@color/text_secondary"
+                android:layout_marginEnd="4dp" />
 
             <Button
                 android:id="@+id/btnTestDown"
                 android:layout_width="0dp"
-                android:layout_height="48dp"
+                android:layout_height="42dp"
                 android:layout_weight="1"
-                android:text="Test DOWN"
-                android:backgroundTint="@color/purple"
-                android:textColor="@color/white"
-                android:layout_marginStart="6dp" />
+                android:text="↓ Test"
+                android:textSize="12sp"
+                android:backgroundTint="@color/bg_card_light"
+                android:textColor="@color/text_secondary"
+                android:layout_marginStart="4dp"
+                android:layout_marginEnd="4dp" />
+
+            <Button
+                android:id="@+id/btnTestTap"
+                android:layout_width="0dp"
+                android:layout_height="42dp"
+                android:layout_weight="1"
+                android:text="👆 Tap"
+                android:textSize="12sp"
+                android:backgroundTint="@color/bg_card_light"
+                android:textColor="@color/text_secondary"
+                android:layout_marginStart="4dp" />
+
         </LinearLayout>
 
-        <Button
-            android:id="@+id/btnTestTap"
-            android:layout_width="match_parent"
-            android:layout_height="48dp"
-            android:text="Test TAP"
-            android:backgroundTint="@color/orange"
-            android:textColor="@color/white"
-            android:layout_marginBottom="24dp" />
+        <!-- ============================================ -->
+        <!-- HOW TO USE SECTION -->
+        <!-- ============================================ -->
 
-        <!-- Instructions -->
         <TextView
             android:layout_width="match_parent"
             android:layout_height="wrap_content"
-            android:text="HOW TO USE:\n1. Enable Overlay + Accessibility\n2. Tap START or RUN IN BACKGROUND\n3. Switch to any app\n4. Move hand → red dot follows\n5. Pinch → tap\n6. Fingers up + flick down → scroll down\n7. Fingers down + flick up → scroll up"
-            android:textColor="#AAAAAA"
-            android:textSize="13sp"
-            android:lineSpacingExtra="6dp"
-            android:layout_marginBottom="30dp" />
+            android:text="HOW TO USE"
+            android:textColor="@color/text_dim"
+            android:textSize="12sp"
+            android:textStyle="bold"
+            android:letterSpacing="0.1"
+            android:layout_marginBottom="8dp" />
+
+        <!-- Step 1 -->
+        <LinearLayout
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:background="@color/bg_card"
+            android:padding="14dp"
+            android:orientation="horizontal"
+            android:gravity="top"
+            android:layout_marginBottom="4dp">
+
+            <TextView
+                android:layout_width="28dp"
+                android:layout_height="28dp"
+                android:text="1"
+                android:textColor="@color/accent"
+                android:textSize="16sp"
+                android:textStyle="bold"
+                android:gravity="center"
+                android:background="@color/bg_card_light" />
+
+            <LinearLayout
+                android:layout_width="0dp"
+                android:layout_height="wrap_content"
+                android:layout_weight="1"
+                android:orientation="vertical"
+                android:layout_marginStart="12dp">
+
+                <TextView
+                    android:layout_width="wrap_content"
+                    android:layout_height="wrap_content"
+                    android:text="Enable Permissions"
+                    android:textColor="@color/text_primary"
+                    android:textSize="14sp"
+                    android:textStyle="bold" />
+
+                <TextView
+                    android:layout_width="wrap_content"
+                    android:layout_height="wrap_content"
+                    android:text="Tap Enable next to Overlay and Accessibility above. These let AeroNav draw the pointer and control your phone."
+                    android:textColor="@color/text_secondary"
+                    android:textSize="12sp"
+                    android:layout_marginTop="2dp"
+                    android:lineSpacingExtra="2dp" />
+
+            </LinearLayout>
+        </LinearLayout>
+
+        <!-- Step 2 -->
+        <LinearLayout
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:background="@color/bg_card"
+            android:padding="14dp"
+            android:orientation="horizontal"
+            android:gravity="top"
+            android:layout_marginBottom="4dp">
+
+            <TextView
+                android:layout_width="28dp"
+                android:layout_height="28dp"
+                android:text="2"
+                android:textColor="@color/accent"
+                android:textSize="16sp"
+                android:textStyle="bold"
+                android:gravity="center"
+                android:background="@color/bg_card_light" />
+
+            <LinearLayout
+                android:layout_width="0dp"
+                android:layout_height="wrap_content"
+                android:layout_weight="1"
+                android:orientation="vertical"
+                android:layout_marginStart="12dp">
+
+                <TextView
+                    android:layout_width="wrap_content"
+                    android:layout_height="wrap_content"
+                    android:text="Start Detection"
+                    android:textColor="@color/text_primary"
+                    android:textSize="14sp"
+                    android:textStyle="bold" />
+
+                <TextView
+                    android:layout_width="wrap_content"
+                    android:layout_height="wrap_content"
+                    android:text="Tap Start or Run in Background. AeroNav will use your front camera to track your hand."
+                    android:textColor="@color/text_secondary"
+                    android:textSize="12sp"
+                    android:layout_marginTop="2dp"
+                    android:lineSpacingExtra="2dp" />
+
+            </LinearLayout>
+        </LinearLayout>
+
+        <!-- Step 3 -->
+        <LinearLayout
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:background="@color/bg_card"
+            android:padding="14dp"
+            android:orientation="horizontal"
+            android:gravity="top"
+            android:layout_marginBottom="16dp">
+
+            <TextView
+                android:layout_width="28dp"
+                android:layout_height="28dp"
+                android:text="3"
+                android:textColor="@color/accent"
+                android:textSize="16sp"
+                android:textStyle="bold"
+                android:gravity="center"
+                android:background="@color/bg_card_light" />
+
+            <LinearLayout
+                android:layout_width="0dp"
+                android:layout_height="wrap_content"
+                android:layout_weight="1"
+                android:orientation="vertical"
+                android:layout_marginStart="12dp">
+
+                <TextView
+                    android:layout_width="wrap_content"
+                    android:layout_height="wrap_content"
+                    android:text="Use Gestures"
+                    android:textColor="@color/text_primary"
+                    android:textSize="14sp"
+                    android:textStyle="bold" />
+
+                <TextView
+                    android:layout_width="wrap_content"
+                    android:layout_height="wrap_content"
+                    android:text="Hold your hand 50–80 cm from the front camera. Use the gestures below to control any app."
+                    android:textColor="@color/text_secondary"
+                    android:textSize="12sp"
+                    android:layout_marginTop="2dp"
+                    android:lineSpacingExtra="2dp" />
+
+            </LinearLayout>
+        </LinearLayout>
+
+        <!-- ============================================ -->
+        <!-- GESTURES SECTION -->
+        <!-- ============================================ -->
+
+        <TextView
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:text="GESTURES"
+            android:textColor="@color/text_dim"
+            android:textSize="12sp"
+            android:textStyle="bold"
+            android:letterSpacing="0.1"
+            android:layout_marginBottom="8dp" />
+
+        <!-- Move Pointer -->
+        <LinearLayout
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:background="@color/bg_card"
+            android:padding="12dp"
+            android:orientation="horizontal"
+            android:gravity="center_vertical"
+            android:layout_marginBottom="3dp">
+
+            <TextView
+                android:layout_width="42dp"
+                android:layout_height="wrap_content"
+                android:text="🖐️"
+                android:textSize="22sp"
+                android:gravity="center" />
+
+            <LinearLayout
+                android:layout_width="0dp"
+                android:layout_height="wrap_content"
+                android:layout_weight="1"
+                android:orientation="vertical"
+                android:layout_marginStart="10dp">
+
+                <TextView
+                    android:layout_width="wrap_content"
+                    android:layout_height="wrap_content"
+                    android:text="Move Pointer"
+                    android:textColor="@color/text_primary"
+                    android:textSize="14sp" />
+
+                <TextView
+                    android:layout_width="wrap_content"
+                    android:layout_height="wrap_content"
+                    android:text="Open hand — pointer follows your hand"
+                    android:textColor="@color/text_secondary"
+                    android:textSize="11sp" />
+
+            </LinearLayout>
+        </LinearLayout>
+
+        <!-- Tap -->
+        <LinearLayout
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:background="@color/bg_card"
+            android:padding="12dp"
+            android:orientation="horizontal"
+            android:gravity="center_vertical"
+            android:layout_marginBottom="3dp">
+
+            <TextView
+                android:layout_width="42dp"
+                android:layout_height="wrap_content"
+                android:text="🤏"
+                android:textSize="22sp"
+                android:gravity="center" />
+
+            <LinearLayout
+                android:layout_width="0dp"
+                android:layout_height="wrap_content"
+                android:layout_weight="1"
+                android:orientation="vertical"
+                android:layout_marginStart="10dp">
+
+                <TextView
+                    android:layout_width="wrap_content"
+                    android:layout_height="wrap_content"
+                    android:text="Tap"
+                    android:textColor="@color/text_primary"
+                    android:textSize="14sp" />
+
+                <TextView
+                    android:layout_width="wrap_content"
+                    android:layout_height="wrap_content"
+                    android:text="Pinch index + thumb — taps at pointer position"
+                    android:textColor="@color/text_secondary"
+                    android:textSize="11sp" />
+
+            </LinearLayout>
+        </LinearLayout>
+
+        <!-- Scroll Up -->
+        <LinearLayout
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:background="@color/bg_card"
+            android:padding="12dp"
+            android:orientation="horizontal"
+            android:gravity="center_vertical"
+            android:layout_marginBottom="3dp">
+
+            <TextView
+                android:layout_width="42dp"
+                android:layout_height="wrap_content"
+                android:text="☝️"
+                android:textSize="22sp"
+                android:gravity="center" />
+
+            <LinearLayout
+                android:layout_width="0dp"
+                android:layout_height="wrap_content"
+                android:layout_weight="1"
+                android:orientation="vertical"
+                android:layout_marginStart="10dp">
+
+                <TextView
+                    android:layout_width="wrap_content"
+                    android:layout_height="wrap_content"
+                    android:text="Scroll Up"
+                    android:textColor="@color/accent_green"
+                    android:textSize="14sp" />
+
+                <TextView
+                    android:layout_width="wrap_content"
+                    android:layout_height="wrap_content"
+                    android:text="Right hand — raise index finger only"
+                    android:textColor="@color/text_secondary"
+                    android:textSize="11sp" />
+
+            </LinearLayout>
+        </LinearLayout>
+
+        <!-- Scroll Down -->
+        <LinearLayout
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:background="@color/bg_card"
+            android:padding="12dp"
+            android:orientation="horizontal"
+            android:gravity="center_vertical"
+            android:layout_marginBottom="3dp">
+
+            <TextView
+                android:layout_width="42dp"
+                android:layout_height="wrap_content"
+                android:text="✌️"
+                android:textSize="22sp"
+                android:gravity="center" />
+
+            <LinearLayout
+                android:layout_width="0dp"
+                android:layout_height="wrap_content"
+                android:layout_weight="1"
+                android:orientation="vertical"
+                android:layout_marginStart="10dp">
+
+                <TextView
+                    android:layout_width="wrap_content"
+                    android:layout_height="wrap_content"
+                    android:text="Scroll Down"
+                    android:textColor="@color/accent_purple"
+                    android:textSize="14sp" />
+
+                <TextView
+                    android:layout_width="wrap_content"
+                    android:layout_height="wrap_content"
+                    android:text="Right hand — raise index + middle finger"
+                    android:textColor="@color/text_secondary"
+                    android:textSize="11sp" />
+
+            </LinearLayout>
+        </LinearLayout>
+
+        <!-- Swipe Left -->
+        <LinearLayout
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:background="@color/bg_card"
+            android:padding="12dp"
+            android:orientation="horizontal"
+            android:gravity="center_vertical"
+            android:layout_marginBottom="3dp">
+
+            <TextView
+                android:layout_width="42dp"
+                android:layout_height="wrap_content"
+                android:text="👈"
+                android:textSize="22sp"
+                android:gravity="center" />
+
+            <LinearLayout
+                android:layout_width="0dp"
+                android:layout_height="wrap_content"
+                android:layout_weight="1"
+                android:orientation="vertical"
+                android:layout_marginStart="10dp">
+
+                <TextView
+                    android:layout_width="wrap_content"
+                    android:layout_height="wrap_content"
+                    android:text="Swipe Left"
+                    android:textColor="#58D1FF"
+                    android:textSize="14sp" />
+
+                <TextView
+                    android:layout_width="wrap_content"
+                    android:layout_height="wrap_content"
+                    android:text="Left hand — raise index finger only"
+                    android:textColor="@color/text_secondary"
+                    android:textSize="11sp" />
+
+            </LinearLayout>
+        </LinearLayout>
+
+        <!-- Swipe Right -->
+        <LinearLayout
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:background="@color/bg_card"
+            android:padding="12dp"
+            android:orientation="horizontal"
+            android:gravity="center_vertical"
+            android:layout_marginBottom="16dp">
+
+            <TextView
+                android:layout_width="42dp"
+                android:layout_height="wrap_content"
+                android:text="👉"
+                android:textSize="22sp"
+                android:gravity="center" />
+
+            <LinearLayout
+                android:layout_width="0dp"
+                android:layout_height="wrap_content"
+                android:layout_weight="1"
+                android:orientation="vertical"
+                android:layout_marginStart="10dp">
+
+                <TextView
+                    android:layout_width="wrap_content"
+                    android:layout_height="wrap_content"
+                    android:text="Swipe Right"
+                    android:textColor="@color/yellow"
+                    android:textSize="14sp" />
+
+                <TextView
+                    android:layout_width="wrap_content"
+                    android:layout_height="wrap_content"
+                    android:text="Left hand — raise index + middle finger"
+                    android:textColor="@color/text_secondary"
+                    android:textSize="11sp" />
+
+            </LinearLayout>
+        </LinearLayout>
+
+        <!-- ============================================ -->
+        <!-- TIPS -->
+        <!-- ============================================ -->
+
+        <TextView
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:text="TIPS"
+            android:textColor="@color/text_dim"
+            android:textSize="12sp"
+            android:textStyle="bold"
+            android:letterSpacing="0.1"
+            android:layout_marginBottom="8dp" />
+
+        <LinearLayout
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:background="@color/bg_card"
+            android:padding="14dp"
+            android:orientation="vertical"
+            android:layout_marginBottom="16dp">
+
+            <TextView
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:text="💡  Keep your hand 50–80 cm from the camera"
+                android:textColor="@color/text_secondary"
+                android:textSize="12sp"
+                android:layout_marginBottom="6dp" />
+
+            <TextView
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:text="💡  Good lighting helps detection accuracy"
+                android:textColor="@color/text_secondary"
+                android:textSize="12sp"
+                android:layout_marginBottom="6dp" />
+
+            <TextView
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:text="💡  Hold gestures steady for 0.4 seconds"
+                android:textColor="@color/text_secondary"
+                android:textSize="12sp"
+                android:layout_marginBottom="6dp" />
+
+            <TextView
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:text="💡  Open hand fully to move the pointer"
+                android:textColor="@color/text_secondary"
+                android:textSize="12sp"
+                android:layout_marginBottom="6dp" />
+
+            <TextView
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:text="💡  Use notification \'Stop\' to end detection"
+                android:textColor="@color/text_secondary"
+                android:textSize="12sp" />
+
+        </LinearLayout>
+
+        <!-- ============================================ -->
+        <!-- FOOTER -->
+        <!-- ============================================ -->
+
+        <TextView
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:text="AeroNav v1.0\nAll processing happens locally on your device.\nNo data is collected or transmitted."
+            android:textColor="@color/text_dim"
+            android:textSize="11sp"
+            android:gravity="center"
+            android:lineSpacingExtra="4dp"
+            android:layout_marginBottom="20dp" />
 
     </LinearLayout>
 </ScrollView>

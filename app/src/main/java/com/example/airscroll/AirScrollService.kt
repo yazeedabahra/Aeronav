@@ -693,8 +693,8 @@ class AirScrollService : LifecycleService() {
 
         return if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
             Notification.Builder(this, CHANNEL_ID)
-                .setContentTitle("AirScroll Running")
-                .setContentText("Hand gestures active")
+                .setContentTitle("AeroNav Running")
+                .setContentText("Hand gesture navigation active")
                 .setSmallIcon(android.R.drawable.ic_menu_camera)
                 .setContentIntent(openPending)
                 .addAction(android.R.drawable.ic_delete, "Stop", stopPending)
