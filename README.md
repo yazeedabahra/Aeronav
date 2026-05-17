@@ -21,7 +21,7 @@ A native Android application that lets you control your entire phone using only 
 ## 📥 Direct Download Link
 
 > You can download the latest stable APK for Android here:
-> [**Download AeroNav v1.0.0**](#)
+> [**Download AeroNav v1.0.0**](https://github.com/omhujband/Aeronav/releases/download/v1.0.0/AeroNav.apk)
 
 ---
 
