@@ -13,6 +13,11 @@ import android.content.IntentFilter
 import android.os.BatteryManager
 import android.os.PowerManager
 import android.graphics.Bitmap
+import android.hardware.camera2.CameraCharacteristics
+import android.hardware.camera2.CaptureRequest
+import androidx.camera.camera2.interop.Camera2CameraInfo
+import androidx.camera.camera2.interop.Camera2Interop
+import androidx.camera.camera2.interop.ExperimentalCamera2Interop
 import android.graphics.Matrix
 import android.graphics.PixelFormat
 import android.os.Build
@@ -91,6 +96,7 @@ class YvoraService : LifecycleService() {
     private var receiverRegistered = false
     @Volatile private var analysisIntervalMs = 250L
     private var thermalLevel = 0
+    private var captureRateLabel = "Auto"
     private var batteryTenths: Int? = null
     var pauseReason: String? = null
         private set
@@ -105,7 +111,7 @@ class YvoraService : LifecycleService() {
                     else -> "Severe or higher"
                 }
             } else "Thermal status unavailable"
-            return (pauseReason ?: "Thermal: $level • Target ${1000 / analysisIntervalMs} /s") + battery
+            return (pauseReason ?: "Thermal: $level • Analysis target ${1000 / analysisIntervalMs} /s • Camera $captureRateLabel") + battery
         }
 
     private val powerReceiver = object : BroadcastReceiver() {
@@ -494,6 +500,36 @@ class YvoraService : LifecycleService() {
         isPointerVisible = false
     }
 
+    @androidx.annotation.OptIn(markerClass = [ExperimentalCamera2Interop::class])
+    private fun buildAnalysis(provider: ProcessCameraProvider, selector: CameraSelector, epoch: Long, limitRate: Boolean): ImageAnalysis {
+        val builder = ImageAnalysis.Builder()
+            .setTargetResolution(cameraDetail.requestedSize(lowRamDevice))
+            .setBackpressureStrategy(ImageAnalysis.STRATEGY_KEEP_ONLY_LATEST)
+        captureRateLabel = "Auto"
+        if (limitRate) {
+            try {
+                // Only request a range advertised by the selected front camera.
+                val info = selector.filter(provider.availableCameraInfos).firstOrNull()
+                val ranges = info?.let {
+                    Camera2CameraInfo.from(it).getCameraCharacteristic(
+                        CameraCharacteristics.CONTROL_AE_AVAILABLE_TARGET_FPS_RANGES)
+                }
+                val range = ranges?.filter { it.lower >= 8 && it.upper in 12..20 }
+                    ?.minWithOrNull(compareBy<android.util.Range<Int>> { it.upper }.thenByDescending { it.lower })
+                if (range != null) {
+                    Camera2Interop.Extender(builder).setCaptureRequestOption(
+                        CaptureRequest.CONTROL_AE_TARGET_FPS_RANGE, range)
+                    captureRateLabel = "${range.lower}–${range.upper} fps requested"
+                }
+            } catch (e: Exception) {
+                Log.w(TAG, "Camera FPS request unavailable; using automatic capture", e)
+            }
+        }
+        return builder.build().also { analysis ->
+            analysis.setAnalyzer(cameraExecutor) { imageProxy -> processFrame(imageProxy, epoch) }
+        }
+    }
+
     private fun startCamera() {
         if (stopped || pauseReason != null || cameraRunning || cameraStarting || !modelReady) return
         cameraStarting = true
@@ -504,17 +540,21 @@ class YvoraService : LifecycleService() {
             try {
                 val provider = cameraProviderFuture.get()
                 cameraProvider = provider
-                val imageAnalysis = ImageAnalysis.Builder()
-                    .setTargetResolution(cameraDetail.requestedSize(lowRamDevice))
-                    .setBackpressureStrategy(ImageAnalysis.STRATEGY_KEEP_ONLY_LATEST)
-                    .build()
-                imageAnalysis.setAnalyzer(cameraExecutor) { imageProxy ->
-                    processFrame(imageProxy, epoch)
-                }
-                analysisUseCase = imageAnalysis
                 val selector = CameraSelector.DEFAULT_FRONT_CAMERA
+                val imageAnalysis = buildAnalysis(provider, selector, epoch, true)
+                analysisUseCase = imageAnalysis
                 cameraRunning = true
-                provider.bindToLifecycle(this, selector, imageAnalysis)
+                try {
+                    provider.bindToLifecycle(this, selector, imageAnalysis)
+                } catch (e: Exception) {
+                    if (captureRateLabel == "Auto") throw e
+                    Log.w(TAG, "Retrying without camera FPS override", e)
+                    imageAnalysis.clearAnalyzer()
+                    provider.unbind(imageAnalysis)
+                    val fallback = buildAnalysis(provider, selector, epoch, false)
+                    analysisUseCase = fallback
+                    provider.bindToLifecycle(this, selector, fallback)
+                }
                 cameraStarting = false
                 Log.d(TAG, "Analysis-only camera started")
             } catch (e: Exception) {
