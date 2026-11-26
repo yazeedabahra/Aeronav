@@ -124,6 +124,7 @@ class MainActivity : AppCompatActivity() {
 
     override fun onResume() {
         super.onResume()
+        distanceSwitch.isChecked = CameraSettings.readDetail(this) == CameraDetail.DISTANCE
         updateStatuses()
         YvoraService.statusListener = statusListener
         YvoraService.instance?.let { safeSwitch.isChecked = it.isCalibrating }
