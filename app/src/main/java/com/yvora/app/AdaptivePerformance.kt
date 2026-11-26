@@ -11,6 +11,12 @@ internal class FramePacer(private val minimumIntervalMs: Long) {
 
     fun canStart(nowMs: Long): Boolean = lastStart < 0L || nowMs - lastStart >= intervalMs
 
+    // Keep a processing rest period even when results are arriving quickly.
+    fun canStart(nowMs: Long, requestedMs: Long): Boolean {
+        val interval = maxOf(requestedMs, (averageCostMs * 2.0).toLong().coerceAtMost(320L))
+        return lastStart < 0L || nowMs - lastStart >= interval
+    }
+
     fun started(nowMs: Long) { lastStart = nowMs }
 
     fun finished(costMs: Long) {
