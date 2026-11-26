@@ -62,7 +62,8 @@ class GestureRecognizer {
     // -------------------------------------------------------
 
     // Tap
-    private val pinchDrag = PinchDragEngine()
+    private val pinchDrag = PinchDragEngine(holdMs = 300L, closeThreshold = 0.23f, openThreshold = 0.34f)
+    private val geometry = HandPoseGeometry()
     private var lastTapTime    = 0L
 
     // Finger gesture
@@ -92,6 +93,7 @@ class GestureRecognizer {
         gestureStartTime = 0L
         pointerFilter.reset()
         horizontalSwipe.reset()
+        geometry.reset()
     }
 
     // -------------------------------------------------------
@@ -111,6 +113,7 @@ class GestureRecognizer {
             gestureStartTime = 0L
             pointerFilter.reset()
             horizontalSwipe.trackingLost()
+            geometry.reset()
             return GestureState(
                 handDetected = false,
                 pinchAction = PinchAction.CANCEL,
@@ -151,14 +154,17 @@ class GestureRecognizer {
 
         val fingersUp = (if (indexUp) 1 else 0) + (if (middleUp) 1 else 0) +
                 (if (ringUp) 1 else 0) + (if (pinkyUp) 1 else 0)
-        val totalUp   = fingersUp + if (thumbUp) 1 else 0
+        val legacyTotal = fingersUp + if (thumbUp) 1 else 0
+        for (i in 0..20) geometry.set(i, landmarks[i].x() * w, landmarks[i].y() * h)
+        val poseMask = geometry.updateMask()
+        val totalUp = Integer.bitCount(poseMask)
 
-        // --- Tap: index + thumb pinch ---
-        val thumbTip = landmarks[4]
-        val indexTip = landmarks[8]
-        val tapDist  = hypot(thumbTip.x() - indexTip.x(), thumbTip.y() - indexTip.y())
+        // A deliberate pinch can start with relaxed fingers. A true three-finger
+        // pose retains priority, including the middle/ring/pinky combination.
+        val tapDist = geometry.pinchRatio()
         val ownedBefore = pinchDrag.ownsPinch
-        val swipe = if (ownedBefore) null else horizontalSwipe.update(totalUp, rawPX, rawPY, now)
+        val swipe = if (ownedBefore) null else horizontalSwipe.update(totalUp, rawPX, rawPY, now,
+            geometry.palmSize() / w, h / w)
         val swipePose = totalUp == 3 && !ownedBefore
         val blocksOther = !ownedBefore && (swipePose || horizontalSwipe.blocksOtherGestures)
         val action = pinchDrag.update(tapDist, now, !blocksOther, supportsDrag)
@@ -175,7 +181,7 @@ class GestureRecognizer {
             gestureCount++
         } else if (action == PinchAction.DROP) lastGesture = "DROP"
 
-        val isPointerMode = totalUp >= POINTER_MIN_FINGERS && !blocksOther && !pinchOwnsFrame
+        val isPointerMode = (legacyTotal >= POINTER_MIN_FINGERS || totalUp >= POINTER_MIN_FINGERS) && !blocksOther && !pinchOwnsFrame
 
         // --- Finger gesture detection ---
         // Only detect when NOT in pointer mode and NOT tapping
@@ -244,11 +250,11 @@ class GestureRecognizer {
 
         // --- Debug ---
         val fingerStr = buildString {
-            if (thumbUp)  append("T")
-            if (indexUp)  append("I")
-            if (middleUp) append("M")
-            if (ringUp)   append("R")
-            if (pinkyUp)  append("P")
+            if (poseMask and 1 != 0) append("T")
+            if (poseMask and 2 != 0) append("I")
+            if (poseMask and 4 != 0) append("M")
+            if (poseMask and 8 != 0) append("R")
+            if (poseMask and 16 != 0) append("P")
             if (isEmpty()) append("FIST")
         }
 
@@ -260,7 +266,7 @@ class GestureRecognizer {
         }
 
         val debugInfo = "$displayHand hand | Fingers: $fingerStr ($totalUp) | " +
-                "${if (swipePose) "Horizontal swipe ready" else if (gestureArmed) "Armed: $gestureDirection" else "Idle"}"
+                "${if (swipePose) "Horizontal swipe ready" else if (gestureArmed) "Armed: $gestureDirection" else "Idle"} | Pinch: ${(tapDist * 100).toInt()}%"
 
         return GestureState(
             handDetected     = true,

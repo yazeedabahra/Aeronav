@@ -26,6 +26,7 @@ internal class ContinuousDrag(private val service: AccessibilityService) {
     private var moveAfter = 0L
     private var generation = 0L
     val busy: Boolean get() = active
+    val ready: Boolean get() = active && !ending && previous != null
 
     fun start(px: Float, py: Float): Boolean {
         if (active || !px.isFinite() || !py.isFinite()) return false
@@ -66,8 +67,8 @@ internal class ContinuousDrag(private val service: AccessibilityService) {
         if (!ending && now - lastUpdate > 650L) {
             ending = true; cancelling = true
         }
-        val nx = if (!cancelling && now >= moveAfter) targetX else x
-        val ny = if (!cancelling && now >= moveAfter) targetY else y
+        val nx = if (!cancelling && previous != null) targetX else x
+        val ny = if (!cancelling && previous != null) targetY else y
         val final = ending
         val path = Path().apply {
             moveTo(x, y)
@@ -76,7 +77,7 @@ internal class ContinuousDrag(private val service: AccessibilityService) {
         val token = generation
         try {
             val stroke = previous?.continueStroke(path, 0L, if (final) 40L else 80L, !final)
-                ?: GestureDescription.StrokeDescription(path, 0L, 80L, !final)
+                ?: GestureDescription.StrokeDescription(path, 0L, (moveAfter - now).coerceAtLeast(80L), !final)
             inFlight = true
             val callback = object : AccessibilityService.GestureResultCallback() {
                 override fun onCompleted(gestureDescription: GestureDescription?) {

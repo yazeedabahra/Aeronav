@@ -130,6 +130,8 @@ class YvoraService : LifecycleService() {
     private var pointerX = 0f
     private var pointerY = 0f
     private var dragStarted = false
+    var gestureDispatch = "No command yet"
+        private set
     private var pinchPending = false
     private var pinchAnchorX = 0f
     private var pinchAnchorY = 0f
@@ -673,7 +675,7 @@ class YvoraService : LifecycleService() {
                 }
                 PinchAction.TAP -> {
                     if (pinchPending && state.triggeredTap) {
-                        YvoraAccessibilityService.performTap(pinchAnchorX, pinchAnchorY)
+                        gestureDispatch = if (YvoraAccessibilityService.performTap(pinchAnchorX, pinchAnchorY)) "Tap dispatched" else "Tap rejected: check Accessibility"
                         flashPointer()
                     }
                     pinchPending = false
@@ -681,7 +683,8 @@ class YvoraService : LifecycleService() {
                 }
                 PinchAction.START_DRAG -> {
                     if (pinchPending) dragStarted = YvoraAccessibilityService.beginDrag(pinchAnchorX, pinchAnchorY)
-                    if (dragStarted) setPointerColor(android.graphics.Color.GREEN)
+                    gestureDispatch = if (dragStarted) "Hold: waiting for Android" else "Drag rejected: check Accessibility"
+                    if (dragStarted) setPointerColor(android.graphics.Color.CYAN)
                 }
                 PinchAction.MOVE_DRAG -> {
                     if (dragStarted && YvoraAccessibilityService.dragBusy()) {
@@ -692,11 +695,19 @@ class YvoraService : LifecycleService() {
                         updatePointer(px / (screenWidth - 1).coerceAtLeast(1), py / (screenHeight - 1).coerceAtLeast(1))
                         YvoraAccessibilityService.moveDrag(pointerX, pointerY)
                         showPointer()
-                        setPointerColor(android.graphics.Color.GREEN)
-                    } else dragStarted = false
+                        val ready = YvoraAccessibilityService.dragReady()
+                        gestureDispatch = if (ready) "Dragging: touch held" else "Hold: waiting for Android"
+                        setPointerColor(if (ready) android.graphics.Color.GREEN else android.graphics.Color.CYAN)
+                    } else {
+                        if (dragStarted) gestureDispatch = "Drag interrupted by Android"
+                        dragStarted = false
+                    }
                 }
                 PinchAction.DROP -> {
-                    if (dragStarted) YvoraAccessibilityService.endDrag()
+                    if (dragStarted) {
+                        gestureDispatch = "Drop requested"
+                        YvoraAccessibilityService.endDrag()
+                    }
                     dragStarted = false
                     pinchPending = false
                     setPointerColor(android.graphics.Color.TRANSPARENT)
@@ -714,7 +725,7 @@ class YvoraService : LifecycleService() {
             }
             statusListener?.onStatus(state.handDetected, state.lastGesture,
                 state.isTapPinching, false,
-                if (dragStarted) "Dragging" else state.debugInfo)
+                state.debugInfo)
             return
         }
 
@@ -749,19 +760,19 @@ class YvoraService : LifecycleService() {
         if (state.triggeredGesture != null) {
             when (state.triggeredGesture) {
                 "UP" -> {
-                    YvoraAccessibilityService.performScroll("up")
+                    gestureDispatch = if (YvoraAccessibilityService.performScroll("up")) "UP dispatched" else "UP rejected: check Accessibility"
                     Log.d(TAG, "SCROLL UP")
                 }
                 "DOWN" -> {
-                    YvoraAccessibilityService.performScroll("down")
+                    gestureDispatch = if (YvoraAccessibilityService.performScroll("down")) "DOWN dispatched" else "DOWN rejected: check Accessibility"
                     Log.d(TAG, "SCROLL DOWN")
                 }
                 "LEFT" -> {
-                    YvoraAccessibilityService.performScroll("left")
+                    gestureDispatch = if (YvoraAccessibilityService.performScroll("left")) "LEFT dispatched" else "LEFT rejected: check Accessibility"
                     Log.d(TAG, "SWIPE LEFT")
                 }
                 "RIGHT" -> {
-                    YvoraAccessibilityService.performScroll("right")
+                    gestureDispatch = if (YvoraAccessibilityService.performScroll("right")) "RIGHT dispatched" else "RIGHT rejected: check Accessibility"
                     Log.d(TAG, "SWIPE RIGHT")
                 }
             }
