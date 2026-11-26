@@ -569,6 +569,7 @@ class YvoraService : LifecycleService() {
                         flashPointer()
                     }
                     pinchPending = false
+                    setPointerColor(android.graphics.Color.TRANSPARENT)
                 }
                 PinchAction.START_DRAG -> {
                     if (pinchPending) dragStarted = YvoraAccessibilityService.beginDrag(pinchAnchorX, pinchAnchorY)
@@ -594,6 +595,7 @@ class YvoraService : LifecycleService() {
                 }
                 PinchAction.CANCEL -> {
                     cancelDrag()
+                    setPointerColor(android.graphics.Color.TRANSPARENT)
                     if (!state.handDetected) {
                         hidePointer()
                         pointerX = screenWidth / 2f

@@ -26,6 +26,7 @@ internal class PinchDragEngine(private val holdMs: Long = 350L) {
             val result = when {
                 dragging -> PinchAction.DROP
                 ownsPinch && (now - startedAt < holdMs || !supportsDrag) -> PinchAction.TAP
+                ownsPinch -> PinchAction.CANCEL
                 else -> PinchAction.NONE
             }
             startedAt = -1L

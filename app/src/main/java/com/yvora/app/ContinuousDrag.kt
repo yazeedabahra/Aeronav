@@ -17,6 +17,7 @@ internal class ContinuousDrag(private val service: AccessibilityService) {
     private var active = false
     private var inFlight = false
     private var ending = false
+    private var cancelling = false
     private var x = 0f
     private var y = 0f
     private var targetX = 0f
@@ -30,6 +31,7 @@ internal class ContinuousDrag(private val service: AccessibilityService) {
         if (active || !px.isFinite() || !py.isFinite()) return false
         active = true
         ending = false
+        cancelling = false
         x = px; y = py; targetX = px; targetY = py
         lastUpdate = SystemClock.uptimeMillis()
         moveAfter = lastUpdate + ViewConfiguration.getLongPressTimeout() + 80L
@@ -45,7 +47,7 @@ internal class ContinuousDrag(private val service: AccessibilityService) {
 
     fun finish(cancel: Boolean = false) {
         if (!active) return
-        if (cancel) { targetX = x; targetY = y }
+        if (cancel) cancelling = true
         ending = true
         if (!inFlight) pump()
     }
@@ -62,10 +64,10 @@ internal class ContinuousDrag(private val service: AccessibilityService) {
         if (!active || inFlight) return
         val now = SystemClock.uptimeMillis()
         if (!ending && now - lastUpdate > 650L) {
-            ending = true; targetX = x; targetY = y
+            ending = true; cancelling = true
         }
-        val nx = if (now >= moveAfter) targetX else x
-        val ny = if (now >= moveAfter) targetY else y
+        val nx = if (!cancelling && now >= moveAfter) targetX else x
+        val ny = if (!cancelling && now >= moveAfter) targetY else y
         val final = ending
         val path = Path().apply {
             moveTo(x, y)
