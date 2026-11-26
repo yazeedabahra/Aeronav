@@ -11,6 +11,8 @@ class GestureRecognizer {
         val handDetected: Boolean = false,
         val pointerX: Float = 0.5f,
         val pointerY: Float = 0.5f,
+        val rawX: Float = Float.NaN,
+        val rawY: Float = Float.NaN,
 
         // Hand info
         val handedness: String = "Unknown",
@@ -73,6 +75,14 @@ class GestureRecognizer {
 
     // Pointer smoothing
     private val pointerFilter = AdaptivePointerFilter()
+    private var controlRange = ControlRange()
+
+    internal fun setControlRange(value: ControlRange) {
+        if (controlRange != value) {
+            controlRange = value
+            pointerFilter.reset()
+        }
+    }
 
     fun reset() {
         wasTapPinching = false
@@ -121,7 +131,7 @@ class GestureRecognizer {
                 landmarks[13].x() + landmarks[17].x()) / 5f
         val rawPY = (landmarks[0].y() + landmarks[5].y() + landmarks[9].y() +
                 landmarks[13].y() + landmarks[17].y()) / 5f
-        pointerFilter.update(rawPX, rawPY, now)
+        pointerFilter.update(controlRange.mapX(rawPX), controlRange.mapY(rawPY), now)
 
         // --- Finger analysis ---
         val thumbUp  = isThumbExtended(landmarks, w, h)
@@ -228,6 +238,8 @@ class GestureRecognizer {
             handDetected     = true,
             pointerX         = pointerFilter.x,
             pointerY         = pointerFilter.y,
+            rawX             = rawPX,
+            rawY             = rawPY,
             handedness       = handedness,
             fingersUp        = totalUp,
             isPointerMode    = isPointerMode,

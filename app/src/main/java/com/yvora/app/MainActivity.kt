@@ -9,6 +9,8 @@ import android.os.Build
 import android.os.Bundle
 import android.provider.Settings
 import android.widget.Button
+import android.widget.SeekBar
+import android.widget.Switch
 import android.widget.TextView
 import android.widget.Toast
 import androidx.appcompat.app.AppCompatActivity
@@ -24,6 +26,18 @@ class MainActivity : AppCompatActivity() {
     private lateinit var txtResultRate: TextView
     private lateinit var txtFrameAge: TextView
     private lateinit var txtProfile: TextView
+    private lateinit var calibrationView: CalibrationView
+    private lateinit var rangeSummary: TextView
+    private lateinit var calibrationStatus: TextView
+    private lateinit var detailStatus: TextView
+    private lateinit var widthSeek: SeekBar
+    private lateinit var heightSeek: SeekBar
+    private lateinit var centerXSeek: SeekBar
+    private lateinit var centerYSeek: SeekBar
+    private lateinit var distanceSwitch: Switch
+    private lateinit var safeSwitch: Switch
+    private var restoringRange = false
+    private var lastSampleUpdate = -1000L
     private var lastUiUpdate = -1000L
     private var previousStatus = ""
     private fun tint(id: Int) = ContextCompat.getColor(this, id)
@@ -61,6 +75,20 @@ class MainActivity : AppCompatActivity() {
                 }
                 val summary = "$mode • Last: $gesture"
                 val now = SystemClock.uptimeMillis()
+                if (now - lastSampleUpdate >= 250L) {
+                    lastSampleUpdate = now
+                    calibrationView.setSample(service.sampleX, service.sampleY,
+                        service.analysisWidth, service.analysisHeight)
+                    calibrationStatus.text = if (!handDetected) "No hand detected"
+                        else if (service.sampleX.isFinite() && service.sampleY.isFinite())
+                            "Hand detected • ${(service.sampleX * 100).toInt()}% X / ${(service.sampleY * 100).toInt()}% Y"
+                        else "Hand detected"
+                    detailStatus.text = if (distanceSwitch.isChecked != service.usingDistanceDetail)
+                        "Stop and restart engine to apply detail mode."
+                        else if (service.analysisWidth > 0)
+                            "Active analysis: ${service.analysisWidth} × ${service.analysisHeight}"
+                        else "Waiting for camera."
+                }
                 if (summary != previousStatus || now - lastUiUpdate >= 250L) {
                     previousStatus = summary
                     lastUiUpdate = now
@@ -86,6 +114,7 @@ class MainActivity : AppCompatActivity() {
         setContentView(R.layout.activity_main)
         bindViews()
         setupButtons()
+        setupCalibration()
         requestPermissions()
     }
 
@@ -93,10 +122,15 @@ class MainActivity : AppCompatActivity() {
         super.onResume()
         updateStatuses()
         YvoraService.statusListener = statusListener
+        YvoraService.instance?.let { safeSwitch.isChecked = it.isCalibrating }
     }
 
     override fun onPause() {
         super.onPause()
+        if (safeSwitch.isChecked) {
+            // Keep input suppressed until the user explicitly exits safe mode or stops.
+            YvoraService.instance?.setCalibrationMode(true)
+        }
         YvoraService.statusListener = null
     }
 
@@ -108,6 +142,16 @@ class MainActivity : AppCompatActivity() {
         txtResultRate    = findViewById(R.id.txtResultRate)
         txtFrameAge      = findViewById(R.id.txtFrameAge)
         txtProfile       = findViewById(R.id.txtProfile)
+        calibrationView  = findViewById(R.id.calibrationView)
+        rangeSummary     = findViewById(R.id.txtRangeSummary)
+        calibrationStatus = findViewById(R.id.txtCalibrationStatus)
+        detailStatus     = findViewById(R.id.txtCameraDetailStatus)
+        widthSeek        = findViewById(R.id.seekRangeWidth)
+        heightSeek       = findViewById(R.id.seekRangeHeight)
+        centerXSeek      = findViewById(R.id.seekCenterX)
+        centerYSeek      = findViewById(R.id.seekCenterY)
+        distanceSwitch   = findViewById(R.id.switchDistanceDetail)
+        safeSwitch       = findViewById(R.id.switchSafeCalibration)
         btnOverlay       = findViewById(R.id.btnOverlay)
         btnAccessibility = findViewById(R.id.btnAccessibility)
         btnStart         = findViewById(R.id.btnStart)
@@ -116,6 +160,57 @@ class MainActivity : AppCompatActivity() {
         btnTestUp        = findViewById(R.id.btnTestUp)
         btnTestDown      = findViewById(R.id.btnTestDown)
         btnTestTap       = findViewById(R.id.btnTestTap)
+    }
+
+    private fun currentRange() = ControlRange(
+        widthSeek.progress + 30, heightSeek.progress + 30,
+        centerXSeek.progress, centerYSeek.progress
+    )
+
+    private fun applyRange(save: Boolean) {
+        val range = currentRange()
+        rangeSummary.text = "Width ${range.widthPercent}%  •  Height ${range.heightPercent}%\nCenter X ${range.horizontalCenter}%  •  Y ${range.verticalCenter}%"
+        calibrationView.setRange(range)
+        YvoraService.instance?.updateControlRange(range)
+        if (save) CameraSettings.saveRange(this, range)
+    }
+
+    private fun restoreRange(range: ControlRange) {
+        restoringRange = true
+        widthSeek.progress = range.widthPercent - 30
+        heightSeek.progress = range.heightPercent - 30
+        centerXSeek.progress = range.horizontalCenter
+        centerYSeek.progress = range.verticalCenter
+        restoringRange = false
+        applyRange(false)
+    }
+
+    private fun setupCalibration() {
+        restoreRange(CameraSettings.readRange(this))
+        distanceSwitch.isChecked = CameraSettings.readDetail(this) == CameraDetail.DISTANCE
+        val listener = object : SeekBar.OnSeekBarChangeListener {
+            override fun onProgressChanged(seekBar: SeekBar?, progress: Int, fromUser: Boolean) {
+                if (fromUser && !restoringRange) applyRange(true)
+            }
+            override fun onStartTrackingTouch(seekBar: SeekBar?) {}
+            override fun onStopTrackingTouch(seekBar: SeekBar?) {}
+        }
+        listOf(widthSeek, heightSeek, centerXSeek, centerYSeek).forEach {
+            it.setOnSeekBarChangeListener(listener)
+        }
+        distanceSwitch.setOnCheckedChangeListener { _, enabled ->
+            CameraSettings.saveDetail(this, if (enabled) CameraDetail.DISTANCE else CameraDetail.AUTO)
+            detailStatus.text = if (YvoraService.instance != null)
+                "Stop and restart engine to apply detail mode." else "Applies at next engine start."
+        }
+        safeSwitch.setOnCheckedChangeListener { _, enabled ->
+            YvoraService.instance?.setCalibrationMode(enabled)
+        }
+        findViewById<Button>(R.id.btnResetCalibration).setOnClickListener {
+            restoreRange(ControlRange())
+            applyRange(true)
+            distanceSwitch.isChecked = false
+        }
     }
 
     private fun setupButtons() {
@@ -157,6 +252,10 @@ class MainActivity : AppCompatActivity() {
         }
 
         btnRunBg.setOnClickListener {
+            if (safeSwitch.isChecked) {
+                toast("Turn off safe calibration before running in background")
+                return@setOnClickListener
+            }
             if (!hasCamera()) {
                 toast("Camera permission required")
                 return@setOnClickListener
@@ -232,6 +331,7 @@ class MainActivity : AppCompatActivity() {
     private fun startYvora() {
         val intent = Intent(this, YvoraService::class.java).apply {
             action = YvoraService.ACTION_START
+            putExtra(YvoraService.EXTRA_CALIBRATION, safeSwitch.isChecked)
         }
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
             startForegroundService(intent)
@@ -299,6 +399,13 @@ class MainActivity : AppCompatActivity() {
         txtProfile.text = "Adaptive pacing enabled"
         previousStatus = ""
         lastUiUpdate = -1000L
+        lastSampleUpdate = -1000L
+        if (!running) {
+            calibrationView.setSample(Float.NaN, Float.NaN, 0, 0)
+            calibrationStatus.text = "Start engine to test your camera."
+            detailStatus.text = "Applies at next engine start."
+        }
+
     }
 
     override fun onActivityResult(requestCode: Int, resultCode: Int, data: Intent?) {

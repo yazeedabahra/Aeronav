@@ -65,6 +65,7 @@ class YvoraService : LifecycleService() {
 
         const val ACTION_START = "START"
         const val ACTION_STOP = "STOP"
+        const val EXTRA_CALIBRATION = "calibration_mode"
     }
 
     // -------------------------------------------------------
@@ -97,6 +98,32 @@ class YvoraService : LifecycleService() {
     private val resultPending = AtomicBoolean(false)
     private lateinit var framePacer: FramePacer
     private var lowRamDevice = false
+    private var cameraDetail = CameraDetail.AUTO
+    private var calibrationMode = false
+    val isCalibrating: Boolean get() = calibrationMode
+    private var needsOpenHand = false
+    var sampleX = Float.NaN
+        private set
+    var sampleY = Float.NaN
+        private set
+    var analysisWidth = 0
+        private set
+    var analysisHeight = 0
+        private set
+    val usingDistanceDetail: Boolean get() = cameraDetail == CameraDetail.DISTANCE
+
+    // These methods are called only on the main thread.
+    internal fun updateControlRange(range: ControlRange) {
+        gestureRecognizer.setControlRange(range)
+    }
+
+    internal fun setCalibrationMode(enabled: Boolean) {
+        if (calibrationMode == enabled) return
+        calibrationMode = enabled
+        needsOpenHand = true
+        gestureRecognizer.reset()
+        forceHidePointer()
+    }
     val isLowRamProfile: Boolean get() = lowRamDevice
     var resultRate = 0f
         private set
@@ -137,6 +164,9 @@ class YvoraService : LifecycleService() {
         cameraExecutor = java.util.concurrent.Executors.newSingleThreadExecutor()
         val activityManager = getSystemService(ACTIVITY_SERVICE) as ActivityManager
         lowRamDevice = activityManager.isLowRamDevice || activityManager.memoryClass <= 128
+        cameraDetail = CameraSettings.readDetail(this)
+        gestureRecognizer.setControlRange(CameraSettings.readRange(this))
+        // Preserve the existing pacing; distance detail can cost more per frame.
         framePacer = FramePacer(if (lowRamDevice) 100L else 66L)
 
         val metrics = resources.displayMetrics
@@ -160,6 +190,7 @@ class YvoraService : LifecycleService() {
             else -> {
                 if (started || stopped) return START_STICKY
                 started = true
+                calibrationMode = intent?.getBooleanExtra(EXTRA_CALIBRATION, false) ?: false
                 startForeground(NOTIFICATION_ID, buildNotification())
                 setupOverlayWindows()
                 forceHidePointer()
@@ -387,7 +418,7 @@ class YvoraService : LifecycleService() {
                 preview.setSurfaceProvider(previewView.surfaceProvider)
 
                 val imageAnalysis = ImageAnalysis.Builder()
-                    .setTargetResolution(if (lowRamDevice) Size(240, 320) else Size(360, 480))
+                    .setTargetResolution(cameraDetail.requestedSize(lowRamDevice))
                     .setBackpressureStrategy(ImageAnalysis.STRATEGY_KEEP_ONLY_LATEST)
                     .build()
 
@@ -459,7 +490,10 @@ class YvoraService : LifecycleService() {
                                 onHandLandmarkerResult(result, width, height)
                             } else {
                                 gestureRecognizer.reset()
+                                sampleX = Float.NaN
+                                sampleY = Float.NaN
                                 hidePointer()
+                                statusListener?.onStatus(false, "None", false, false, "")
                             }
                         }
                     } finally { resultPending.set(false) }
@@ -480,6 +514,22 @@ class YvoraService : LifecycleService() {
 
     private fun onHandLandmarkerResult(result: HandLandmarkerResult, width: Int, height: Int) {
         val state = gestureRecognizer.processResult(result, width, height)
+        sampleX = state.rawX
+        sampleY = state.rawY
+        analysisWidth = width
+        analysisHeight = height
+
+        // Calibration never injects system gestures. On exit require an open hand
+        // without a pinch before resuming input.
+        if (calibrationMode || needsOpenHand) {
+            if (!calibrationMode && state.handDetected && state.isPointerMode && !state.isTapPinching) {
+                needsOpenHand = false
+            }
+            hidePointer()
+            statusListener?.onStatus(state.handDetected, state.lastGesture,
+                state.isTapPinching, state.gestureArmed, state.debugInfo)
+            return
+        }
 
         // Pointer — only move when in pointer mode (open hand)
         if (state.handDetected) {
