@@ -69,7 +69,8 @@ class MainActivity : AppCompatActivity() {
                 val service = YvoraService.instance ?: return@runOnUiThread
                 val mode = when {
                     !handDetected -> "Searching for hand"
-                    isTapPinching -> "Tap detected"
+                    debugInfo == "Dragging" -> "Dragging • Open fingers to drop"
+                    isTapPinching -> "Pinch held"
                     isGestureMode -> "Gesture armed"
                     else -> "Pointer tracking"
                 }

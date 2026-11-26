@@ -3,6 +3,7 @@ package com.yvora.app
 import android.accessibilityservice.AccessibilityService
 import android.accessibilityservice.GestureDescription
 import android.graphics.Path
+import android.os.Build
 import android.util.Log
 import android.view.accessibility.AccessibilityEvent
 
@@ -25,17 +26,26 @@ class YvoraAccessibilityService : AccessibilityService() {
         }
 
         fun isEnabled() = instance != null
+        internal fun beginDrag(x: Float, y: Float): Boolean = instance?.drag?.start(x, y) ?: false
+        internal fun moveDrag(x: Float, y: Float) { instance?.drag?.move(x, y) }
+        internal fun endDrag(cancel: Boolean = false) { instance?.drag?.finish(cancel) }
+        internal fun dragBusy(): Boolean = instance?.drag?.busy == true
     }
 
+    private var drag: ContinuousDrag? = null
+
     override fun onServiceConnected() {
+        if (Build.VERSION.SDK_INT >= 26) drag = ContinuousDrag(this)
         instance = this
         Log.d(TAG, "Accessibility service connected")
     }
 
     override fun onAccessibilityEvent(event: AccessibilityEvent?) {}
-    override fun onInterrupt() {}
+    override fun onInterrupt() { drag?.finish(true) }
 
     override fun onDestroy() {
+        drag?.disconnected()
+        drag = null
         super.onDestroy()
         if (instance === this) instance = null
     }
@@ -47,6 +57,7 @@ class YvoraAccessibilityService : AccessibilityService() {
     // -------------------------------------------------------
 
     fun doScroll(direction: String): Boolean {
+        if (drag?.busy == true) return false
         val metrics = resources.displayMetrics
         val screenW = metrics.widthPixels.toFloat()
         val screenH = metrics.heightPixels.toFloat()
@@ -109,6 +120,7 @@ class YvoraAccessibilityService : AccessibilityService() {
     // -------------------------------------------------------
 
     fun doTap(x: Float, y: Float): Boolean {
+        if (drag?.busy == true) return false
         val path = Path().apply {
             moveTo(x, y)
             lineTo(x + 1f, y + 1f)
@@ -129,6 +141,7 @@ class YvoraAccessibilityService : AccessibilityService() {
     // -------------------------------------------------------
 
     fun doBack(): Boolean {
+        if (drag?.busy == true) return false
         Log.d(TAG, "Performing BACK")
         return performGlobalAction(GLOBAL_ACTION_BACK)
     }

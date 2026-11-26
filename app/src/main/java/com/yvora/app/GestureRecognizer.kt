@@ -19,6 +19,7 @@ class GestureRecognizer {
         val fingersUp: Int = 0,
         val isPointerMode: Boolean = false,
         val isTapPinching: Boolean = false,
+        val pinchAction: PinchAction = PinchAction.NONE,
 
         // Gesture mode
         val gestureArmed: Boolean = false,
@@ -61,7 +62,7 @@ class GestureRecognizer {
     // -------------------------------------------------------
 
     // Tap
-    private var wasTapPinching = false
+    private val pinchDrag = PinchDragEngine()
     private var lastTapTime    = 0L
 
     // Finger gesture
@@ -86,7 +87,7 @@ class GestureRecognizer {
     }
 
     fun reset() {
-        wasTapPinching = false
+        pinchDrag.reset()
         currentGestureDirection = null
         gestureStartTime = 0L
         pointerFilter.reset()
@@ -100,17 +101,19 @@ class GestureRecognizer {
     fun processResult(
         result: HandLandmarkerResult,
         imageWidth: Int,
-        imageHeight: Int
+        imageHeight: Int,
+        supportsDrag: Boolean = android.os.Build.VERSION.SDK_INT >= 26
     ): GestureState {
 
         if (result.landmarks().isEmpty()) {
-            wasTapPinching = true
+            pinchDrag.reset()
             currentGestureDirection = null
             gestureStartTime = 0L
             pointerFilter.reset()
             horizontalSwipe.trackingLost()
             return GestureState(
                 handDetected = false,
+                pinchAction = PinchAction.CANCEL,
                 lastGesture  = lastGesture,
                 gestureCount = gestureCount
             )
@@ -154,26 +157,25 @@ class GestureRecognizer {
         val thumbTip = landmarks[4]
         val indexTip = landmarks[8]
         val tapDist  = hypot(thumbTip.x() - indexTip.x(), thumbTip.y() - indexTip.y())
-        val swipe = horizontalSwipe.update(totalUp, rawPX, rawPY, now)
-        val swipePose = totalUp == 3
-        val blocksOther = swipePose || horizontalSwipe.blocksOtherGestures
-        val rawPinch = tapDist < TAP_PINCH_THRESHOLD
-        val tapPinching = rawPinch && !blocksOther
-
-        var triggeredTap = false
-        if (tapPinching && !wasTapPinching) {
-            if (now - lastTapTime >= TAP_COOLDOWN_MS) {
-                triggeredTap = true
-                lastTapTime  = now
-                lastGesture  = "TAP"
-                gestureCount++
-            }
+        val ownedBefore = pinchDrag.ownsPinch
+        val swipe = if (ownedBefore) null else horizontalSwipe.update(totalUp, rawPX, rawPY, now)
+        val swipePose = totalUp == 3 && !ownedBefore
+        val blocksOther = !ownedBefore && (swipePose || horizontalSwipe.blocksOtherGestures)
+        val action = pinchDrag.update(tapDist, now, !blocksOther, supportsDrag)
+        val pinchOwnsFrame = ownedBefore || pinchDrag.ownsPinch || action != PinchAction.NONE
+        val tapPinching = pinchDrag.ownsPinch
+        val triggeredTap = action == PinchAction.TAP && now - lastTapTime >= TAP_COOLDOWN_MS
+        if (triggeredTap) {
+            lastTapTime = now
+            lastGesture = "TAP"
+            gestureCount++
         }
-        // Do not turn a pinch held during a swipe into a tap on release.
-        wasTapPinching = rawPinch
+        if (action == PinchAction.START_DRAG) {
+            lastGesture = "DRAG"
+            gestureCount++
+        } else if (action == PinchAction.DROP) lastGesture = "DROP"
 
-        // --- Pointer mode: open hand (4+ fingers up) ---
-        val isPointerMode = totalUp >= POINTER_MIN_FINGERS && !blocksOther
+        val isPointerMode = totalUp >= POINTER_MIN_FINGERS && !blocksOther && !pinchOwnsFrame
 
         // --- Finger gesture detection ---
         // Only detect when NOT in pointer mode and NOT tapping
@@ -181,7 +183,10 @@ class GestureRecognizer {
         var gestureArmed = false
         var gestureDirection: String? = null
 
-        if (blocksOther) {
+        if (pinchOwnsFrame) {
+            currentGestureDirection = null
+            gestureStartTime = 0L
+        } else if (blocksOther) {
             currentGestureDirection = null
             gestureStartTime = 0L
             if (swipePose) {
@@ -267,6 +272,7 @@ class GestureRecognizer {
             fingersUp        = totalUp,
             isPointerMode    = isPointerMode,
             isTapPinching    = tapPinching,
+            pinchAction      = action,
             gestureArmed     = gestureArmed,
             gestureDirection = gestureDirection,
             lastGesture      = lastGesture,
