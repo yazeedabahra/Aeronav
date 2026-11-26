@@ -75,6 +75,7 @@ class GestureRecognizer {
 
     // Pointer smoothing
     private val pointerFilter = AdaptivePointerFilter()
+    private val horizontalSwipe = HorizontalSwipeEngine()
     private var controlRange = ControlRange()
 
     internal fun setControlRange(value: ControlRange) {
@@ -89,6 +90,7 @@ class GestureRecognizer {
         currentGestureDirection = null
         gestureStartTime = 0L
         pointerFilter.reset()
+        horizontalSwipe.reset()
     }
 
     // -------------------------------------------------------
@@ -102,7 +104,11 @@ class GestureRecognizer {
     ): GestureState {
 
         if (result.landmarks().isEmpty()) {
-            reset()
+            wasTapPinching = true
+            currentGestureDirection = null
+            gestureStartTime = 0L
+            pointerFilter.reset()
+            horizontalSwipe.trackingLost()
             return GestureState(
                 handDetected = false,
                 lastGesture  = lastGesture,
@@ -148,7 +154,11 @@ class GestureRecognizer {
         val thumbTip = landmarks[4]
         val indexTip = landmarks[8]
         val tapDist  = hypot(thumbTip.x() - indexTip.x(), thumbTip.y() - indexTip.y())
-        val tapPinching = tapDist < TAP_PINCH_THRESHOLD
+        val swipe = horizontalSwipe.update(totalUp, rawPX, rawPY, now)
+        val swipePose = totalUp == 3
+        val blocksOther = swipePose || horizontalSwipe.blocksOtherGestures
+        val rawPinch = tapDist < TAP_PINCH_THRESHOLD
+        val tapPinching = rawPinch && !blocksOther
 
         var triggeredTap = false
         if (tapPinching && !wasTapPinching) {
@@ -159,10 +169,11 @@ class GestureRecognizer {
                 gestureCount++
             }
         }
-        wasTapPinching = tapPinching
+        // Do not turn a pinch held during a swipe into a tap on release.
+        wasTapPinching = rawPinch
 
         // --- Pointer mode: open hand (4+ fingers up) ---
-        val isPointerMode = totalUp >= POINTER_MIN_FINGERS
+        val isPointerMode = totalUp >= POINTER_MIN_FINGERS && !blocksOther
 
         // --- Finger gesture detection ---
         // Only detect when NOT in pointer mode and NOT tapping
@@ -170,7 +181,19 @@ class GestureRecognizer {
         var gestureArmed = false
         var gestureDirection: String? = null
 
-        if (!isPointerMode && !tapPinching) {
+        if (blocksOther) {
+            currentGestureDirection = null
+            gestureStartTime = 0L
+            if (swipePose) {
+                gestureArmed = true
+                gestureDirection = swipe
+                if (swipe != null) {
+                    triggeredGesture = swipe
+                    lastGesture = swipe
+                    gestureCount++
+                }
+            }
+        } else if (!isPointerMode && !tapPinching) {
             val detectedDirection = classifyFingerGesture(
                 handedness = handedness,
                 indexUp    = indexUp,
@@ -232,7 +255,7 @@ class GestureRecognizer {
         }
 
         val debugInfo = "$displayHand hand | Fingers: $fingerStr ($totalUp) | " +
-                "${if (gestureArmed) "Armed: $gestureDirection" else "Idle"}"
+                "${if (swipePose) "Horizontal swipe ready" else if (gestureArmed) "Armed: $gestureDirection" else "Idle"}"
 
         return GestureState(
             handDetected     = true,
@@ -261,9 +284,8 @@ class GestureRecognizer {
     //   Index only         → SCROLL UP
     //   Index + Middle     → SCROLL DOWN
     //
-    // Left hand:
-    //   Index only         → SCROLL LEFT
-    //   Index + Middle     → SCROLL RIGHT
+    // Horizontal gestures: exactly three fingers, either hand, plus movement.
+    // Handedness is retained for the existing vertical gesture mapping.
     //
     // Requirements:
     //   - Only the specified fingers should be extended
@@ -296,13 +318,6 @@ class GestureRecognizer {
                 when {
                     oneFingerUp  -> "UP"
                     twoFingersUp -> "DOWN"
-                    else         -> null
-                }
-            }
-            "Right" -> {
-                when {
-                    oneFingerUp  -> "LEFT"
-                    twoFingersUp -> "RIGHT"
                     else         -> null
                 }
             }
