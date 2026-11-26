@@ -35,17 +35,17 @@ internal class HorizontalSwipeEngine {
     private fun membership(value: Float, low: Float, high: Float): Float =
         ((value - low) / (high - low)).coerceIn(0f, 1f)
 
-    fun update(fingers: Int, x: Float, y: Float, nowMs: Long): String? {
+    fun update(fingers: Int, x: Float, y: Float, nowMs: Long, palmWidth: Float = 0.20f, aspect: Float = 1f): String? {
         if (!x.isFinite() || !y.isFinite()) {
             trackingLost()
             return null
         }
         if (fingers != 3) {
-            anchorTime = -1L
-            lastSampleTime = -1L
             if (blocksOtherGestures) {
                 releaseSamples++
                 if (releaseSamples >= 2) {
+                    anchorTime = -1L
+                    lastSampleTime = -1L
                     latched = false
                     blocksOtherGestures = false
                 }
@@ -57,7 +57,7 @@ internal class HorizontalSwipeEngine {
         if (latched) return null
 
         if (anchorTime < 0 || nowMs <= lastSampleTime ||
-            nowMs - lastSampleTime > 350L || nowMs - anchorTime > 850L) {
+            nowMs - lastSampleTime > 450L || nowMs - anchorTime > 1400L) {
             anchorX = x
             anchorY = y
             anchorTime = nowMs
@@ -69,16 +69,18 @@ internal class HorizontalSwipeEngine {
         if (elapsed < 55L) return null
 
         val dx = x - anchorX
-        val dy = y - anchorY
+        val dy = (y - anchorY) * aspect.coerceIn(0.4f, 2.5f)
         val travel = abs(dx)
-        val speed = travel * 1000f / elapsed
+        val scale = palmWidth.coerceIn(0.07f, 0.5f)
+        val relativeTravel = travel / scale
+        val speed = relativeTravel * 1000f / elapsed
         val horizontal = travel / (travel + abs(dy) + 0.0001f)
         val confidence = minOf(
-            membership(travel, 0.035f, 0.11f),
-            membership(speed, 0.12f, 0.48f),
-            membership(horizontal, 0.55f, 0.85f)
+            membership(relativeTravel, 0.12f, 0.37f),
+            membership(speed, 0.18f, 0.85f),
+            membership(horizontal, 0.52f, 0.77f)
         )
-        if (confidence < 0.65f) return null
+        if (travel < 0.018f || confidence < 0.55f) return null
         latched = true
         anchorTime = -1L
         return if (dx > 0f) "RIGHT" else "LEFT"

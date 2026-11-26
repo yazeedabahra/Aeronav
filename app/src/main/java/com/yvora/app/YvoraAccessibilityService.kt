@@ -30,6 +30,7 @@ class YvoraAccessibilityService : AccessibilityService() {
         internal fun moveDrag(x: Float, y: Float) { instance?.drag?.move(x, y) }
         internal fun endDrag(cancel: Boolean = false) { instance?.drag?.finish(cancel) }
         internal fun dragBusy(): Boolean = instance?.drag?.busy == true
+        internal fun dragReady(): Boolean = instance?.drag?.ready == true
     }
 
     private var drag: ContinuousDrag? = null

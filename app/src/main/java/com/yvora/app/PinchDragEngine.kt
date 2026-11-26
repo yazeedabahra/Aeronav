@@ -2,7 +2,11 @@ package com.yvora.app
 
 enum class PinchAction { NONE, PENDING, TAP, START_DRAG, MOVE_DRAG, DROP, CANCEL }
 
-internal class PinchDragEngine(private val holdMs: Long = 350L) {
+internal class PinchDragEngine(
+    private val holdMs: Long = 350L,
+    private val closeThreshold: Float = 0.06f,
+    private val openThreshold: Float = 0.075f
+) {
     private var startedAt = -1L
     private var lastAt = -1L
     private var dragging = false
@@ -21,7 +25,7 @@ internal class PinchDragEngine(private val holdMs: Long = 350L) {
             reset()
             return PinchAction.CANCEL
         }
-        val closed = distance < if (ownsPinch) 0.075f else 0.06f
+        val closed = distance < (if (ownsPinch) openThreshold else closeThreshold)
         if (!closed) {
             val result = when {
                 dragging -> PinchAction.DROP

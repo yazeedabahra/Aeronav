@@ -70,7 +70,8 @@ class MainActivity : AppCompatActivity() {
                 val mode = when {
                     service.pauseReason != null -> service.pauseReason!!
                     !handDetected -> "Searching for hand"
-                    debugInfo == "Dragging" -> "Dragging • Open fingers to drop"
+                    service.isCalibrating -> "Safe calibration • Gestures disabled"
+                    service.gestureDispatch == "Dragging: touch held" && isTapPinching -> "Dragging • Open fingers to drop"
                     isTapPinching -> "Pinch held"
                     isGestureMode -> "Gesture armed"
                     else -> "Pointer tracking"
@@ -96,7 +97,7 @@ class MainActivity : AppCompatActivity() {
                     lastUiUpdate = now
                     txtEngineState.text = if (service.pauseReason != null) "Paused" else if (handDetected) "Tracking active" else "Searching"
                     txtEngineState.setTextColor(tint(if (handDetected) R.color.accent_green else R.color.accent))
-                    txtStatus.text = summary
+                    txtStatus.text = "$summary\n$debugInfo\n${service.gestureDispatch}"
                     val rate = service.resultRate
                     txtResultRate.text = if (rate > 0f) String.format(java.util.Locale.ROOT, "%.1f", rate) + " /s" else "—"
                     txtFrameAge.text = if (service.frameAgeMs >= 0) "${service.frameAgeMs} ms" else "—"
