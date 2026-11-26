@@ -181,7 +181,7 @@ class GestureRecognizer {
         // Do not count three fingers; only an edge-on, extended hand arms the swipe.
         val swipe = if (ownedBefore) null else horizontalSwipe.updatePose(swipePose, rawPX, rawPY, now,
             geometry.palmSize() / w, h / w)
-        val blocksOther = !ownedBefore && (swipePose || horizontalSwipe.blocksOtherGestures)
+        val blocksOther = !ownedBefore && (knifePose.candidate || swipePose || horizontalSwipe.blocksOtherGestures)
         val action = pinchDrag.update(tapDist, now, !blocksOther, supportsDrag)
         val pinchOwnsFrame = ownedBefore || pinchDrag.ownsPinch || action != PinchAction.NONE
         val tapPinching = pinchDrag.ownsPinch

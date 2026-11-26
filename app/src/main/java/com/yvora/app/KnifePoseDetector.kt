@@ -9,6 +9,8 @@ internal class KnifePoseDetector {
     private var armed = false
     private var enterCount = 0
     private var exitCount = 0
+    var candidate = false
+        private set
     var edgeScore = 0f
         private set
     fun set(i: Int, x: Float, y: Float, z: Float) {
@@ -44,6 +46,7 @@ internal class KnifePoseDetector {
         }
         val together=dist(8,12)+dist(12,16)+dist(16,20)
         val valid=extended>=3 && together <= width*1.40f && edgeScore >= (if (armed) 0.43f else 0.63f)
+        candidate = valid
         if (valid) {
             exitCount=0
             if (++enterCount>=2) armed=true
@@ -53,5 +56,5 @@ internal class KnifePoseDetector {
         }
         return armed
     }
-    fun reset() { armed=false; enterCount=0; exitCount=0; edgeScore=0f }
+    fun reset() { armed=false; enterCount=0; exitCount=0; edgeScore=0f; candidate=false }
 }

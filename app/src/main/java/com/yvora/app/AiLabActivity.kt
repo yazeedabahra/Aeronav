@@ -13,6 +13,9 @@ import java.util.concurrent.Executors
 class AiLabActivity : AppCompatActivity() {
     private val executor=Executors.newSingleThreadExecutor()
     private var generation=0
+    private var pending=false
+    private var pausedService: YvoraService?=null
+    private var wasCalibrating=false
     private lateinit var keyField:EditText
     private lateinit var result:TextView
     private lateinit var submit:Button
@@ -53,9 +56,10 @@ class AiLabActivity : AppCompatActivity() {
             generation++
             keyField.text.clear()
             result.text="Cleared. Any already-sent provider request may finish remotely."
-            submit.isEnabled=true
+            submit.isEnabled=!pending
         }
         submit.setOnClickListener {
+            if(pending) return@setOnClickListener
             val provider=providers[spinner.selectedItemPosition]
             val modelId=model.text.toString().trim()
             val key=keyField.text.toString().trim()
@@ -65,6 +69,7 @@ class AiLabActivity : AppCompatActivity() {
                 return@setOnClickListener
             }
             val ticket=++generation
+            pending=true
             submit.isEnabled=false
             keyField.text.clear()
             result.text="Requesting preview from ${provider.title}…"
@@ -78,13 +83,25 @@ class AiLabActivity : AppCompatActivity() {
                 catch(e:IllegalArgumentException) { "Invalid configuration or command." }
                 catch(e:Exception) { "Connection or response error. Check model ID, key, and internet." }
                 runOnUiThread {
-                    if(!isDestroyed && ticket==generation) {
-                        result.text=message
+                    pending=false
+                    if(!isDestroyed) {
+                        if(ticket==generation) result.text=message
                         submit.isEnabled=true
                     }
                 }
             }
         }
+    }
+    override fun onResume() {
+        super.onResume()
+        pausedService=YvoraService.instance
+        wasCalibrating=pausedService?.isCalibrating==true
+        pausedService?.setCalibrationMode(true)
+    }
+    override fun onPause() {
+        if (YvoraService.instance === pausedService) pausedService?.setCalibrationMode(wasCalibrating)
+        pausedService=null
+        super.onPause()
     }
     override fun onDestroy() {
         generation++
