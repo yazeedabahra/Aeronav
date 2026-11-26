@@ -1,0 +1,3 @@
+# Yvora HUD V1
+
+Native XML views, static vectors and shape resources; no animation loop, WebView, new libraries or 3D rendering. All existing actions are retained. Live telemetry shows delivered tracking-result rate (not camera FPS) and frame age from analyzer entry to main-thread delivery (not end-to-end motion latency). Text updates are limited to 4 Hz for unchanged state, with immediate state-change updates. The launcher uses the new Y mark. Existing engine behavior and automatic pacing remain intact. Calibration controls and manual performance modes are not implemented in this UI iteration. Android build and physical-device validation are still required.

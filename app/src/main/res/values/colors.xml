@@ -7,18 +7,18 @@
     <color name="black">#000000</color>
     <color name="yellow">#FFEB3B</color>
 
-    <color name="bg_primary">#0D1117</color>
-    <color name="bg_card">#161B22</color>
-    <color name="bg_card_light">#1C2333</color>
-    <color name="accent">#58A6FF</color>
-    <color name="accent_green">#3FB950</color>
-    <color name="accent_red">#F85149</color>
-    <color name="accent_orange">#D29922</color>
-    <color name="accent_purple">#BC8CFF</color>
-    <color name="text_primary">#E6EDF3</color>
-    <color name="text_secondary">#8B949E</color>
-    <color name="text_dim">#484F58</color>
-    <color name="divider">#21262D</color>
-    <color name="blue_bg">#0D419D</color>
-    <color name="blue_btn">#1F6FEB</color>
+    <color name="bg_primary">#080D16</color>
+    <color name="bg_card">#101C2A</color>
+    <color name="bg_card_light">#142437</color>
+    <color name="accent">#62E8F5</color>
+    <color name="accent_green">#72E9BA</color>
+    <color name="accent_red">#FF9CA9</color>
+    <color name="accent_orange">#F7CC82</color>
+    <color name="accent_purple">#B6A6FF</color>
+    <color name="text_primary">#EDF7FF</color>
+    <color name="text_secondary">#A9BDCE</color>
+    <color name="text_dim">#7B93AA</color>
+    <color name="divider">#263B50</color>
+    <color name="blue_bg">#12394A</color>
+    <color name="blue_btn">#1B6070</color>
 </resources>

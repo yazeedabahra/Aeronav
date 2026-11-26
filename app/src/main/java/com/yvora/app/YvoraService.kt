@@ -52,6 +52,7 @@ class YvoraService : LifecycleService() {
             isGestureMode: Boolean,
             debugInfo: String
         )
+        fun onStopped() {}
     }
 
     companion object {
@@ -96,6 +97,31 @@ class YvoraService : LifecycleService() {
     private val resultPending = AtomicBoolean(false)
     private lateinit var framePacer: FramePacer
     private var lowRamDevice = false
+    val isLowRamProfile: Boolean get() = lowRamDevice
+    var resultRate = 0f
+        private set
+    var frameAgeMs = -1L
+        private set
+    private var rateWindowStart = -1L
+    private var rateWindowCount = 0
+
+    // Called on main thread for delivered tracking results only.
+    private fun recordTelemetry(frameTime: Long) {
+        val now = SystemClock.uptimeMillis()
+        frameAgeMs = (now - frameTime).coerceAtLeast(0L)
+        if (rateWindowStart < 0L) {
+            rateWindowStart = now
+            rateWindowCount = 0
+        } else {
+            rateWindowCount++
+            val elapsed = now - rateWindowStart
+            if (elapsed >= 1000L) {
+                resultRate = rateWindowCount * 1000f / elapsed
+                rateWindowStart = now
+                rateWindowCount = 0
+            }
+        }
+    }
     private var lastFrameTimestamp = -1L
     private var lastPointerColor: Int? = null
 
@@ -194,8 +220,10 @@ class YvoraService : LifecycleService() {
             Log.e(TAG, "removeView error: ${e.message}")
         }
 
-        if (instance === this) instance = null
-        statusListener = null
+        if (instance === this) {
+            instance = null
+            statusListener?.onStopped()
+        }
     }
 
     // -------------------------------------------------------
@@ -427,6 +455,7 @@ class YvoraService : LifecycleService() {
                     try {
                         if (!stopped) {
                             if (SystemClock.uptimeMillis() - frameTime <= 500L) {
+                                recordTelemetry(frameTime)
                                 onHandLandmarkerResult(result, width, height)
                             } else {
                                 gestureRecognizer.reset()

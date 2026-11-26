@@ -3,7 +3,7 @@ package com.yvora.app
 import android.Manifest
 import android.content.Intent
 import android.content.pm.PackageManager
-import android.graphics.Color
+import android.os.SystemClock
 import android.net.Uri
 import android.os.Build
 import android.os.Bundle
@@ -20,6 +20,13 @@ class MainActivity : AppCompatActivity() {
     private lateinit var txtOverlay: TextView
     private lateinit var txtAccessibility: TextView
     private lateinit var txtStatus: TextView
+    private lateinit var txtEngineState: TextView
+    private lateinit var txtResultRate: TextView
+    private lateinit var txtFrameAge: TextView
+    private lateinit var txtProfile: TextView
+    private var lastUiUpdate = -1000L
+    private var previousStatus = ""
+    private fun tint(id: Int) = ContextCompat.getColor(this, id)
     private lateinit var btnOverlay: Button
     private lateinit var btnAccessibility: Button
     private lateinit var btnStart: Button
@@ -45,23 +52,32 @@ class MainActivity : AppCompatActivity() {
             debugInfo: String
         ) {
             runOnUiThread {
-                val handText  = if (handDetected) "✅ Hand" else "❌ No hand"
-                val handColor = if (handDetected) Color.GREEN else Color.RED
-                txtStatus.setTextColor(handColor)
-
-                val modeText = when {
-                    isTapPinching && isGestureMode -> "🤌 TAP + 🎯 Gesture armed"
-                    isGestureMode -> "🎯 Gesture armed"
-                    isTapPinching -> "🤌 TAP"
-                    else          -> "👆 Pointer mode"
+                val service = YvoraService.instance ?: return@runOnUiThread
+                val mode = when {
+                    !handDetected -> "Searching for hand"
+                    isTapPinching -> "Tap detected"
+                    isGestureMode -> "Gesture armed"
+                    else -> "Pointer tracking"
                 }
-
-                txtStatus.text = buildString {
-                    append("$handText | Last: $gesture")
-                    append("\n$modeText")
-                    append("\n$debugInfo")
+                val summary = "$mode • Last: $gesture"
+                val now = SystemClock.uptimeMillis()
+                if (summary != previousStatus || now - lastUiUpdate >= 250L) {
+                    previousStatus = summary
+                    lastUiUpdate = now
+                    txtEngineState.text = if (handDetected) "Tracking active" else "Searching"
+                    txtEngineState.setTextColor(tint(if (handDetected) R.color.accent_green else R.color.accent))
+                    txtStatus.text = summary
+                    val rate = service.resultRate
+                    txtResultRate.text = if (rate > 0f) String.format(java.util.Locale.ROOT, "%.1f", rate) + " /s" else "—"
+                    txtFrameAge.text = if (service.frameAgeMs >= 0) "${service.frameAgeMs} ms" else "—"
+                    txtProfile.text = if (service.isLowRamProfile) "Adaptive pacing • Low-memory profile" else "Adaptive pacing • Standard profile"
+                    btnStart.text = "ENGINE\nACTIVE"
                 }
             }
+        }
+
+        override fun onStopped() {
+            runOnUiThread { updateStatuses() }
         }
     }
 
@@ -88,6 +104,10 @@ class MainActivity : AppCompatActivity() {
         txtOverlay       = findViewById(R.id.txtOverlayStatus)
         txtAccessibility = findViewById(R.id.txtAccessibilityStatus)
         txtStatus        = findViewById(R.id.txtStatus)
+        txtEngineState   = findViewById(R.id.txtEngineState)
+        txtResultRate    = findViewById(R.id.txtResultRate)
+        txtFrameAge      = findViewById(R.id.txtFrameAge)
+        txtProfile       = findViewById(R.id.txtProfile)
         btnOverlay       = findViewById(R.id.btnOverlay)
         btnAccessibility = findViewById(R.id.btnAccessibility)
         btnStart         = findViewById(R.id.btnStart)
@@ -132,7 +152,8 @@ class MainActivity : AppCompatActivity() {
             }
 
             startYvora()
-            toast("✅ Yvora started")
+            txtEngineState.text = "Starting"
+            txtStatus.text = "Initializing hand tracking"
         }
 
         btnRunBg.setOnClickListener {
@@ -180,7 +201,8 @@ class MainActivity : AppCompatActivity() {
 
             YvoraService.instance?.forceHidePointer()
             stopYvora()
-            toast("⏹ Yvora stopped")
+            txtEngineState.text = "Stopping"
+            txtStatus.text = "Ending hand tracking"
         }
 
         btnTestUp.setOnClickListener {
@@ -252,23 +274,31 @@ class MainActivity : AppCompatActivity() {
     private fun updateStatuses() {
         val ov = hasOverlay()
         txtOverlay.text =
-            if (ov) "Overlay: ✅ Enabled" else "Overlay: ❌ — tap ENABLE"
+            if (ov) "Enabled" else "Not enabled"
         txtOverlay.setTextColor(
-            if (ov) Color.GREEN else Color.parseColor("#FF9800")
+            if (ov) tint(R.color.accent_green) else tint(R.color.accent_orange)
         )
-        btnOverlay.text = if (ov) "SETTINGS" else "ENABLE"
+        btnOverlay.text = if (ov) "Settings" else "Enable"
 
         val ac = YvoraAccessibilityService.isEnabled()
         txtAccessibility.text =
-            if (ac) "Accessibility: ✅ Enabled" else "Accessibility: ❌ — tap ENABLE"
+            if (ac) "Enabled" else "Not enabled"
         txtAccessibility.setTextColor(
-            if (ac) Color.GREEN else Color.parseColor("#FF9800")
+            if (ac) tint(R.color.accent_green) else tint(R.color.accent_orange)
         )
-        btnAccessibility.text = if (ac) "SETTINGS" else "ENABLE"
+        btnAccessibility.text = if (ac) "Settings" else "Enable"
 
         val running = YvoraService.instance != null
-        txtStatus.text = if (running) "Service: ✅ Running" else "Service: Stopped"
-        txtStatus.setTextColor(if (running) Color.GREEN else Color.GRAY)
+        txtEngineState.text = if (running) "Engine running" else "Standby"
+        txtEngineState.setTextColor(tint(R.color.accent))
+        txtStatus.text = if (running) "Waiting for a tracking result" else "Start to detect hand gestures."
+        txtStatus.setTextColor(tint(R.color.text_secondary))
+        btnStart.text = if (running) "ENGINE\nACTIVE" else "START\nENGINE"
+        txtResultRate.text = "—"
+        txtFrameAge.text = "—"
+        txtProfile.text = "Adaptive pacing enabled"
+        previousStatus = ""
+        lastUiUpdate = -1000L
     }
 
     override fun onActivityResult(requestCode: Int, resultCode: Int, data: Intent?) {
