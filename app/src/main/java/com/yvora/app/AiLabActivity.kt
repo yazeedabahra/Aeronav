@@ -19,6 +19,9 @@ class AiLabActivity : AppCompatActivity() {
     private lateinit var keyField:EditText
     private lateinit var result:TextView
     private lateinit var submit:Button
+    private lateinit var diagnose:Button
+    private lateinit var applyFix:Button
+    private var proposed:RepairProposal?=null
     override fun onCreate(savedInstanceState:Bundle?) {
         super.onCreate(savedInstanceState)
         window.addFlags(WindowManager.LayoutParams.FLAG_SECURE)
@@ -37,8 +40,8 @@ class AiLabActivity : AppCompatActivity() {
             panel.addView(this)
         }
         text("YVORA AI CORE",24f)
-        text("Model Lab • preview only")
-        text("Only the command you type is sent to your selected provider. No camera, screen, or gesture data is sent. Use a restricted test API key; do not use a production key. Keys are not saved. API usage may cost money. Production distribution requires a secure backend.")
+        text("Model Lab • navigation preview + diagnostics")
+        text("Only the command you type, or a diagnostic report you explicitly review and approve, is sent to your selected provider. No camera images, screen text, raw logs or hand coordinates are sent. Use a restricted test API key; do not use a production key. Keys are not saved. API usage may cost money. Production distribution requires a secure backend.")
         val providers=AiProvider.values()
         val spinner=Spinner(this).apply {
             adapter=ArrayAdapter(this@AiLabActivity,android.R.layout.simple_spinner_dropdown_item,providers.map { it.title })
@@ -48,6 +51,8 @@ class AiLabActivity : AppCompatActivity() {
         keyField=edit("Temporary / restricted API key",true)
         val prompt=edit("Command (e.g. swipe right, then go back)")
         submit=Button(this).apply { text="Preview AI command";panel.addView(this) }
+        diagnose=Button(this).apply { text="Review diagnostic report";panel.addView(this) }
+        applyFix=Button(this).apply { text="Apply suggested lower camera detail";isEnabled=false;panel.addView(this) }
         val clear=Button(this).apply { text="Clear key and cancel preview";panel.addView(this) }
         result=text("No model connected yet.")
         val scroll=ScrollView(this).apply { addView(panel) }
@@ -57,6 +62,9 @@ class AiLabActivity : AppCompatActivity() {
             keyField.text.clear()
             result.text="Cleared. Any already-sent provider request may finish remotely."
             submit.isEnabled=!pending
+            diagnose.isEnabled=!pending
+            proposed=null
+            applyFix.isEnabled=false
         }
         submit.setOnClickListener {
             if(pending) return@setOnClickListener
@@ -70,7 +78,10 @@ class AiLabActivity : AppCompatActivity() {
             }
             val ticket=++generation
             pending=true
+            proposed=null
+            applyFix.isEnabled=false
             submit.isEnabled=false
+            diagnose.isEnabled=false
             keyField.text.clear()
             result.text="Requesting preview from ${provider.title}…"
             executor.execute {
@@ -87,9 +98,75 @@ class AiLabActivity : AppCompatActivity() {
                     if(!isDestroyed) {
                         if(ticket==generation) result.text=message
                         submit.isEnabled=true
+                        diagnose.isEnabled=true
                     }
                 }
             }
+        }
+        diagnose.setOnClickListener {
+            if(pending) return@setOnClickListener
+            val provider=providers[spinner.selectedItemPosition]
+            val modelId=model.text.toString().trim()
+            if(modelId.isEmpty() || keyField.text.isBlank()) {
+                result.text="Enter model ID and API key first."
+                return@setOnClickListener
+            }
+            val state=YvoraService.instance?.diagnosticState() ?: "engine_running=false; live_metrics=unavailable"
+            val report="Yvora version 1.3.1-dev\n$state\n"+DiagnosticCounters.report()
+            androidx.appcompat.app.AlertDialog.Builder(this)
+                .setTitle("Send only this report to ${provider.title}?")
+                .setMessage(report+"\n\nAPI usage may cost money. No screenshots or raw logs are included.")
+                .setNegativeButton("Cancel",null)
+                .setPositiveButton("Analyze") { _,_ ->
+                    if(!pending) {
+                        val key=keyField.text.toString().trim()
+                        keyField.text.clear()
+                        val ticket=++generation
+                        pending=true
+                        proposed=null
+                        applyFix.isEnabled=false
+                        submit.isEnabled=false
+                        diagnose.isEnabled=false
+                        result.text="Analyzing diagnostics…"
+                        executor.execute {
+                            var repair:RepairProposal?=null
+                            val message=try {
+                                repair=DiagnosticGate.parse(AiProviderClient.diagnose(provider,modelId,key,report))
+                                repair?.let { "Suggested action: ${it.action.name}\n${it.explanation}\nNo change applied." }
+                                    ?: "Invalid diagnostic response. No change applied."
+                            } catch(e:AiNetworkException) { e.message ?: "Provider rejected request." }
+                            catch(e:Exception) { "Connection or response error. Check configuration." }
+                            runOnUiThread {
+                                pending=false
+                                if(!isDestroyed) {
+                                    if(ticket==generation) {
+                                        proposed=repair
+                                        result.text=message
+                                        applyFix.isEnabled=DiagnosticGate.canLowerDetail(
+                                            repair?.action ?: RepairAction.KEEP_SETTINGS,
+                                            CameraSettings.readDetail(this)==CameraDetail.DISTANCE)
+                                    }
+                                    submit.isEnabled=true
+                                    diagnose.isEnabled=true
+                                }
+                            }
+                        }
+                    }
+                }.show()
+        }
+        applyFix.setOnClickListener {
+            val repair=proposed ?: return@setOnClickListener
+            if(!DiagnosticGate.canLowerDetail(repair.action,CameraSettings.readDetail(this)==CameraDetail.DISTANCE)) return@setOnClickListener
+            androidx.appcompat.app.AlertDialog.Builder(this)
+                .setTitle("Lower camera detail?")
+                .setMessage("This saves AUTO camera detail for the next engine start. You can restore Distance Detail in settings. No other setting changes.")
+                .setNegativeButton("Cancel",null)
+                .setPositiveButton("Apply") { _,_ ->
+                    CameraSettings.saveDetail(this,CameraDetail.AUTO)
+                    proposed=null
+                    applyFix.isEnabled=false
+                    result.text="AUTO detail saved. Stop and restart the engine to test. No improvement has been measured yet."
+                }.show()
         }
     }
     override fun onResume() {

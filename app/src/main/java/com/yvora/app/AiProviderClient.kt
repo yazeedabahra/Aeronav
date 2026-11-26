@@ -9,11 +9,16 @@ import javax.net.ssl.HttpsURLConnection
 internal object AiProviderClient {
     private fun msg(role:String, content:String) = JSONObject().put("role",role).put("content",content)
 
-    fun plan(provider: AiProvider, model: String, key: String, request: String): String {
+    fun plan(provider: AiProvider, model: String, key: String, request: String): String =
+        this.request(provider,model,key,request,AiCommandGate.INSTRUCTION,1000)
+
+    fun diagnose(provider: AiProvider, model: String, key: String, report: String): String =
+        request(provider,model,key,report,DiagnosticGate.INSTRUCTION,3000)
+
+    private fun request(provider: AiProvider, model: String, key: String, request: String, instructions: String, maxLength: Int): String {
         require(model.matches(Regex("[A-Za-z0-9._:-]{1,100}"))) { "Invalid model ID" }
         require(key.isNotBlank() && key.length <= 2048 && !key.any { it.isWhitespace() }) { "Invalid API key" }
-        require(request.isNotBlank() && request.length <= 1000) { "Enter a command up to 1000 characters" }
-        val instructions = AiCommandGate.INSTRUCTION
+        require(request.isNotBlank() && request.length <= maxLength) { "Invalid request length" }
         val url: String
         val payload: JSONObject
         when(provider) {

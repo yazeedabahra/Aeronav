@@ -130,6 +130,7 @@ class YvoraService : LifecycleService() {
     private var pointerX = 0f
     private var pointerY = 0f
     private var dragStarted = false
+    internal fun diagnosticState(): String = "engine_running=$cameraRunning; calibration=$calibrationMode; thermal_status=${if (Build.VERSION.SDK_INT >= 29) thermalLevel.toString() else "unavailable"}; battery_temp_tenths_c=${batteryTenths ?: "unavailable"}; analysis_target_ms=$analysisIntervalMs; analysis_resolution=${analysisWidth}x$analysisHeight; distance_detail=$usingDistanceDetail; accessibility_connected=${YvoraAccessibilityService.isEnabled()}"
     var gestureDispatch = "No command yet"
         private set
     private var pinchPending = false
@@ -430,6 +431,7 @@ class YvoraService : LifecycleService() {
             Log.d(TAG, "HandLandmarker ready")
 
         } catch (e: Exception) {
+            DiagnosticCounters.error()
             Log.e(TAG, "MediaPipe init failed: ${e.message}", e)
         }
     }
@@ -560,6 +562,7 @@ class YvoraService : LifecycleService() {
                 cameraStarting = false
                 Log.d(TAG, "Analysis-only camera started")
             } catch (e: Exception) {
+                DiagnosticCounters.error()
                 Log.e(TAG, "Camera start failed", e)
                 stopCamera()
                 stopSelf()
@@ -610,6 +613,7 @@ class YvoraService : LifecycleService() {
                                 recordTelemetry(frameTime)
                                 onHandLandmarkerResult(result, width, height)
                             } else {
+                                DiagnosticCounters.stale()
                                 cancelDrag()
                                 gestureRecognizer.reset()
                                 needsOpenHand = true
@@ -624,6 +628,7 @@ class YvoraService : LifecycleService() {
                 if (!posted) resultPending.set(false)
             }
         } catch (e: Exception) {
+            DiagnosticCounters.error()
             Log.e(TAG, "Frame error: ${e.message}")
         } finally {
             if (!proxyClosed) imageProxy.close()
@@ -637,6 +642,7 @@ class YvoraService : LifecycleService() {
 
     private fun onHandLandmarkerResult(result: HandLandmarkerResult, width: Int, height: Int) {
         val state = gestureRecognizer.processResult(result, width, height)
+        DiagnosticCounters.result(state.handDetected, frameAgeMs)
         val now = SystemClock.uptimeMillis()
         thermalPolicy.observe(now, state.handDetected, state.rawX, state.rawY, state.fingersUp,
             state.isTapPinching || state.gestureArmed || state.pinchAction != PinchAction.NONE && state.handDetected)
@@ -660,6 +666,9 @@ class YvoraService : LifecycleService() {
             return
         }
 
+        if (state.pinchAction == PinchAction.START_DRAG) DiagnosticCounters.dragStart()
+        if (state.pinchAction == PinchAction.DROP) DiagnosticCounters.dragDrop()
+        if (state.triggeredGesture == "LEFT" || state.triggeredGesture == "RIGHT") DiagnosticCounters.swipe()
         if (state.pinchAction != PinchAction.NONE) {
             when (state.pinchAction) {
                 PinchAction.PENDING -> {
@@ -676,6 +685,7 @@ class YvoraService : LifecycleService() {
                 PinchAction.TAP -> {
                     if (pinchPending && state.triggeredTap) {
                         gestureDispatch = if (YvoraAccessibilityService.performTap(pinchAnchorX, pinchAnchorY)) "Tap dispatched" else "Tap rejected: check Accessibility"
+                        if (gestureDispatch.startsWith("Tap rejected")) DiagnosticCounters.rejected()
                         flashPointer()
                     }
                     pinchPending = false
@@ -684,6 +694,7 @@ class YvoraService : LifecycleService() {
                 PinchAction.START_DRAG -> {
                     if (pinchPending) dragStarted = YvoraAccessibilityService.beginDrag(pinchAnchorX, pinchAnchorY)
                     gestureDispatch = if (dragStarted) "Hold: waiting for Android" else "Drag rejected: check Accessibility"
+                    if (!dragStarted) DiagnosticCounters.rejected()
                     if (dragStarted) setPointerColor(android.graphics.Color.CYAN)
                 }
                 PinchAction.MOVE_DRAG -> {
@@ -699,7 +710,10 @@ class YvoraService : LifecycleService() {
                         gestureDispatch = if (ready) "Dragging: touch held" else "Hold: waiting for Android"
                         setPointerColor(if (ready) android.graphics.Color.GREEN else android.graphics.Color.CYAN)
                     } else {
-                        if (dragStarted) gestureDispatch = "Drag interrupted by Android"
+                        if (dragStarted) {
+                            gestureDispatch = "Drag interrupted by Android"
+                            DiagnosticCounters.rejected()
+                        }
                         dragStarted = false
                     }
                 }
@@ -776,6 +790,7 @@ class YvoraService : LifecycleService() {
                     Log.d(TAG, "SWIPE RIGHT")
                 }
             }
+            if (gestureDispatch.contains("rejected")) DiagnosticCounters.rejected()
             flashPointer()
         }
 
