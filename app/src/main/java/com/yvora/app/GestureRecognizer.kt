@@ -64,6 +64,7 @@ class GestureRecognizer {
     // Tap
     private val pinchDrag = PinchDragEngine(holdMs = 300L, closeThreshold = 0.23f, openThreshold = 0.34f)
     private val geometry = HandPoseGeometry()
+    private val knifePose = KnifePoseDetector()
     private var lastTapTime    = 0L
 
     // Finger gesture
@@ -94,6 +95,7 @@ class GestureRecognizer {
         pointerFilter.reset()
         horizontalSwipe.reset()
         geometry.reset()
+        knifePose.reset()
     }
 
     // -------------------------------------------------------
@@ -114,6 +116,7 @@ class GestureRecognizer {
             pointerFilter.reset()
             horizontalSwipe.trackingLost()
             geometry.reset()
+            knifePose.reset()
             return GestureState(
                 handDetected = false,
                 pinchAction = PinchAction.CANCEL,
@@ -159,13 +162,25 @@ class GestureRecognizer {
         val poseMask = geometry.updateMask()
         val totalUp = Integer.bitCount(poseMask)
 
-        // A deliberate pinch can start with relaxed fingers. A true three-finger
-        // pose retains priority, including the middle/ring/pinky combination.
+        // MediaPipe world landmarks provide depth without another model.
+        // Fall back to aspect-corrected image landmarks if depth output is absent.
+        val world = result.worldLandmarks().firstOrNull()
+        for (i in 0..20) {
+            if (world != null && world.size == 21) {
+                val pt = world[i]
+                knifePose.set(i, pt.x(), pt.y(), pt.z())
+            } else {
+                val pt = landmarks[i]
+                knifePose.set(i, pt.x()*w, pt.y()*h, pt.z()*w)
+            }
+        }
+        val edgePose = knifePose.update()
         val tapDist = geometry.pinchRatio()
         val ownedBefore = pinchDrag.ownsPinch
-        val swipe = if (ownedBefore) null else horizontalSwipe.update(totalUp, rawPX, rawPY, now,
+        val swipePose = edgePose && !ownedBefore
+        // Do not count three fingers; only an edge-on, extended hand arms the swipe.
+        val swipe = if (ownedBefore) null else horizontalSwipe.updatePose(swipePose, rawPX, rawPY, now,
             geometry.palmSize() / w, h / w)
-        val swipePose = totalUp == 3 && !ownedBefore
         val blocksOther = !ownedBefore && (swipePose || horizontalSwipe.blocksOtherGestures)
         val action = pinchDrag.update(tapDist, now, !blocksOther, supportsDrag)
         val pinchOwnsFrame = ownedBefore || pinchDrag.ownsPinch || action != PinchAction.NONE
@@ -266,7 +281,7 @@ class GestureRecognizer {
         }
 
         val debugInfo = "$displayHand hand | Fingers: $fingerStr ($totalUp) | " +
-                "${if (swipePose) "Horizontal swipe ready" else if (gestureArmed) "Armed: $gestureDirection" else "Idle"} | Pinch: ${(tapDist * 100).toInt()}%"
+                "${if (swipePose) "Knife hand: swipe ready" else if (gestureArmed) "Armed: $gestureDirection" else "Idle"} | Edge: ${(knifePose.edgeScore * 100).toInt()}% | Pinch: ${(tapDist * 100).toInt()}%"
 
         return GestureState(
             handDetected     = true,
@@ -296,7 +311,7 @@ class GestureRecognizer {
     //   Index only         → SCROLL UP
     //   Index + Middle     → SCROLL DOWN
     //
-    // Horizontal gestures: exactly three fingers, either hand, plus movement.
+    // Horizontal gestures: edge-on knife hand, either hand, plus movement.
     // Handedness is retained for the existing vertical gesture mapping.
     //
     // Requirements:

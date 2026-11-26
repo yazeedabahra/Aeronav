@@ -4,7 +4,7 @@ import kotlin.math.abs
 
 /**
  * Horizontal swipe uses the raw mirrored camera centroid, independent of
- * pointer sensitivity and handedness. Exactly three extended fingers arm it.
+ * pointer sensitivity and handedness. An explicit pose gate arms it.
  * Fuzzy memberships combine horizontal travel, average speed and dominance.
  */
 internal class HorizontalSwipeEngine {
@@ -35,12 +35,16 @@ internal class HorizontalSwipeEngine {
     private fun membership(value: Float, low: Float, high: Float): Float =
         ((value - low) / (high - low)).coerceIn(0f, 1f)
 
-    fun update(fingers: Int, x: Float, y: Float, nowMs: Long, palmWidth: Float = 0.20f, aspect: Float = 1f): String? {
+    // Legacy count-based entry retained only for existing motion regression tests.
+    fun update(fingers: Int, x: Float, y: Float, nowMs: Long, palmWidth: Float = 0.20f, aspect: Float = 1f): String? =
+        updatePose(fingers == 3, x, y, nowMs, palmWidth, aspect)
+
+    fun updatePose(armed: Boolean, x: Float, y: Float, nowMs: Long, palmWidth: Float = 0.20f, aspect: Float = 1f): String? {
         if (!x.isFinite() || !y.isFinite()) {
             trackingLost()
             return null
         }
-        if (fingers != 3) {
+        if (!armed) {
             if (blocksOtherGestures) {
                 releaseSamples++
                 if (releaseSamples >= 2) {
