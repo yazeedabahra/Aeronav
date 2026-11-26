@@ -35,7 +35,7 @@ class GestureReliabilityTest {
             val thumb = mask and 1 != 0
             g.set(1,-20f,80f); g.set(2,-30f,65f)
             g.set(3, if(thumb) -48f else -18f, if(thumb) 50f else 55f)
-            g.set(4, if(thumb) -70f else -4f, if(thumb) 36f else 65f)
+            g.set(4, if(thumb) -80f else -4f, if(thumb) 36f else 65f)
             for (f in 1..4) {
                 val i=f*4+1; val x=(f-2.5f)*24f
                 val extended=mask and (1 shl f) != 0
