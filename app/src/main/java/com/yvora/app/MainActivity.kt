@@ -118,6 +118,7 @@ class MainActivity : AppCompatActivity() {
         bindViews()
         setupButtons()
         setupCalibration()
+        findViewById<Button>(R.id.btnAiCore).setOnClickListener { startActivity(Intent(this, AiLabActivity::class.java)) }
         requestPermissions()
     }
 
