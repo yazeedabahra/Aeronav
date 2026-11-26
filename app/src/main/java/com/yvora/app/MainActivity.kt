@@ -1,4 +1,4 @@
-package com.example.airscroll
+package com.yvora.app
 
 import android.Manifest
 import android.content.Intent
@@ -34,9 +34,9 @@ class MainActivity : AppCompatActivity() {
         private const val OVERLAY_CODE = 101
     }
 
-    // StatusListener with 4 parameters matching AirScrollService.StatusListener
+    // StatusListener with 4 parameters matching YvoraService.StatusListener
 
-    private val statusListener = object : AirScrollService.StatusListener {
+    private val statusListener = object : YvoraService.StatusListener {
         override fun onStatus(
             handDetected: Boolean,
             gesture: String,
@@ -76,12 +76,12 @@ class MainActivity : AppCompatActivity() {
     override fun onResume() {
         super.onResume()
         updateStatuses()
-        AirScrollService.statusListener = statusListener
+        YvoraService.statusListener = statusListener
     }
 
     override fun onPause() {
         super.onPause()
-        AirScrollService.statusListener = null
+        YvoraService.statusListener = null
     }
 
     private fun bindViews() {
@@ -126,13 +126,13 @@ class MainActivity : AppCompatActivity() {
             }
 
             // Check if already running
-            if (AirScrollService.instance != null) {
-                toast("⚡ AeroNav is already running")
+            if (YvoraService.instance != null) {
+                toast("⚡ Yvora is already running")
                 return@setOnClickListener
             }
 
-            startAirScroll()
-            toast("✅ AeroNav started")
+            startYvora()
+            toast("✅ Yvora started")
         }
 
         btnRunBg.setOnClickListener {
@@ -146,9 +146,9 @@ class MainActivity : AppCompatActivity() {
             }
 
             // Check if already running
-            if (AirScrollService.instance != null) {
+            if (YvoraService.instance != null) {
                 toast("⚡ Already running — going to background")
-                AirScrollService.instance?.forceHidePointer()
+                YvoraService.instance?.forceHidePointer()
                 android.os.Handler(android.os.Looper.getMainLooper()).postDelayed({
                     val home = Intent(Intent.ACTION_MAIN).apply {
                         addCategory(Intent.CATEGORY_HOME)
@@ -159,8 +159,8 @@ class MainActivity : AppCompatActivity() {
                 return@setOnClickListener
             }
 
-            AirScrollService.instance?.forceHidePointer()
-            startAirScroll()
+            YvoraService.instance?.forceHidePointer()
+            startYvora()
             android.os.Handler(android.os.Looper.getMainLooper()).postDelayed({
                 val home = Intent(Intent.ACTION_MAIN).apply {
                     addCategory(Intent.CATEGORY_HOME)
@@ -168,48 +168,48 @@ class MainActivity : AppCompatActivity() {
                 }
                 startActivity(home)
             }, 300)
-            toast("✅ AeroNav running in background")
+            toast("✅ Yvora running in background")
         }
 
         btnStop.setOnClickListener {
             // Check if running
-            if (AirScrollService.instance == null) {
-                toast("❌ AeroNav is not running")
+            if (YvoraService.instance == null) {
+                toast("❌ Yvora is not running")
                 return@setOnClickListener
             }
 
-            AirScrollService.instance?.forceHidePointer()
-            stopAirScroll()
-            toast("⏹ AeroNav stopped")
+            YvoraService.instance?.forceHidePointer()
+            stopYvora()
+            toast("⏹ Yvora stopped")
         }
 
         btnTestUp.setOnClickListener {
-            val ok = AirScrollAccessibilityService.performScroll("up")
+            val ok = YvoraAccessibilityService.performScroll("up")
             toast(if (ok) "✅ Scroll UP" else "❌ Enable accessibility first")
         }
 
         btnTestDown.setOnClickListener {
-            val ok = AirScrollAccessibilityService.performScroll("down")
+            val ok = YvoraAccessibilityService.performScroll("down")
             toast(if (ok) "✅ Scroll DOWN" else "❌ Enable accessibility first")
         }
 
         btnTestTap.setOnClickListener {
-            val service = AirScrollService.instance
+            val service = YvoraService.instance
             if (service != null) {
-                val ok = AirScrollAccessibilityService.performTap(
+                val ok = YvoraAccessibilityService.performTap(
                     service.screenWidth / 2f,
                     service.screenHeight / 2f
                 )
                 toast(if (ok) "✅ Tap center" else "❌ Enable accessibility first")
             } else {
-                toast("Start AeroNav first")
+                toast("Start Yvora first")
             }
         }
     }
 
-    private fun startAirScroll() {
-        val intent = Intent(this, AirScrollService::class.java).apply {
-            action = AirScrollService.ACTION_START
+    private fun startYvora() {
+        val intent = Intent(this, YvoraService::class.java).apply {
+            action = YvoraService.ACTION_START
         }
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
             startForegroundService(intent)
@@ -218,9 +218,9 @@ class MainActivity : AppCompatActivity() {
         }
     }
 
-    private fun stopAirScroll() {
-        startService(Intent(this, AirScrollService::class.java).apply {
-            action = AirScrollService.ACTION_STOP
+    private fun stopYvora() {
+        startService(Intent(this, YvoraService::class.java).apply {
+            action = YvoraService.ACTION_STOP
         })
     }
 
@@ -258,7 +258,7 @@ class MainActivity : AppCompatActivity() {
         )
         btnOverlay.text = if (ov) "SETTINGS" else "ENABLE"
 
-        val ac = AirScrollAccessibilityService.isEnabled()
+        val ac = YvoraAccessibilityService.isEnabled()
         txtAccessibility.text =
             if (ac) "Accessibility: ✅ Enabled" else "Accessibility: ❌ — tap ENABLE"
         txtAccessibility.setTextColor(
@@ -266,7 +266,7 @@ class MainActivity : AppCompatActivity() {
         )
         btnAccessibility.text = if (ac) "SETTINGS" else "ENABLE"
 
-        val running = AirScrollService.instance != null
+        val running = YvoraService.instance != null
         txtStatus.text = if (running) "Service: ✅ Running" else "Service: Stopped"
         txtStatus.setTextColor(if (running) Color.GREEN else Color.GRAY)
     }

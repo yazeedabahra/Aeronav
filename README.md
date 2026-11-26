@@ -1,4 +1,4 @@
-# ✋ AeroNav — Touchless Hand Gesture Control
+# ✋ Yvora — Touchless Hand Gesture Control
 
 A native Android application that lets you control your entire phone using only hand gestures detected by the front-facing camera. No touch needed. No wearable. No special hardware.
 
@@ -6,11 +6,11 @@ A native Android application that lets you control your entire phone using only 
 
 ## 📖 About
 
-**AeroNav** allows you to navigate your Android device completely hands-free. The app places a floating red dot on your screen that follows your hand position in real time. You can use specific finger gestures to tap, scroll, swipe, and navigate across any app on your phone including the home screen, Instagram, YouTube, TikTok, browser, settings, and everything else. It operates locally on the device with no internet connection required.
+**Yvora** allows you to navigate your Android device completely hands-free. The app places a floating red dot on your screen that follows your hand position in real time. You can use specific finger gestures to tap, scroll, swipe, and navigate across any app on your phone including the home screen, Instagram, YouTube, TikTok, browser, settings, and everything else. It operates locally on the device with no internet connection required.
 
 ## ✨ Features
 
-- **📷 Real-Time Hand Detection**: Captures hand movements at 15-25 FPS via the front camera using MediaPipe.
+- **📷 Real-Time Hand Detection**: Uses the front camera and MediaPipe with adaptive frame pacing; actual speed depends on the device.
 - **🎯 Dynamic Floating Pointer**: A colored pointer overlay tracks your hand and provides visual feedback.
 - **👌 Pinch to Tap**: Bring your index and thumb together to instantly tap anywhere on the screen.
 - **⬆️⬇️ Scroll Gestures**: Use single and double-finger gestures to scroll up or down (Right Hand).
@@ -18,10 +18,9 @@ A native Android application that lets you control your entire phone using only 
 - **🔋 Background Execution**: Runs as a persistent foreground service, letting you control other apps seamlessly.
 - **🔒 Fully Offline**: No camera footage is stored or transmitted. Completely private.
 
-## 📥 Direct Download Link
+## Downloads
 
-> You can download the latest stable APK for Android here:
-> [**Download AeroNav v1.0.0**](https://github.com/omhujband/Aeronav/releases/download/v1.0.0/AeroNav.apk)
+Yvora is under development. No verified Yvora APK has been published yet.
 
 ---
 
@@ -38,8 +37,9 @@ Before you begin, ensure you have the following installed:
 
 1. **Clone the repository**:
    ```bash
-   git clone https://github.com/omhujband/Aeronav.git
-   cd AirScroll
+   git clone https://github.com/yazeedabahra/Aeronav.git
+   cd Aeronav
+   git checkout performance-v1
    ```
 
 2. **Add MediaPipe Model**:
@@ -53,17 +53,17 @@ To run the application on your connected Android device:
 2. Build and run the app.
 3. Grant **Camera Permission** when prompted.
 4. Enable **Overlay Permission** to allow the floating pointer to draw over other apps.
-5. Enable the **Accessibility Service** for AeroNav in Android Settings to allow gesture injection.
+5. Enable the **Accessibility Service** for Yvora in Android Settings to allow gesture injection.
 
 ---
 
 ## ⚙️ How It Works
 
 ### Architecture
-AeroNav is built around a single core service (`AirScrollService`) that runs independently of the UI.
+Yvora is built around a single core service (`YvoraService`) that runs independently of the UI.
 
 - **CameraX Overlay**: A 1x1 pixel invisible window keeps the camera alive even when in the background.
-- **MediaPipe Pipeline**: Processes frames in `LIVE_STREAM` mode to output 21 hand landmarks asynchronously.
+- **MediaPipe Pipeline**: Processes frames in `VIDEO` mode on the camera worker to output 21 hand landmarks.
 - **GestureRecognizer**: Analyzes landmark positions to classify hand states and update the pointer.
 - **AccessibilityService**: Injects taps and 250ms swipes system-wide that are indistinguishable from physical touches.
 
@@ -91,9 +91,9 @@ AeroNav is built around a single core service (`AirScrollService`) that runs ind
 ```text
 app/src/main/
 ├── java/.../
-│   ├── AirScrollService.kt              # Core service — owns camera, MediaPipe, pointer
+│   ├── YvoraService.kt              # Core service — owns camera, MediaPipe, pointer
 │   ├── GestureRecognizer.kt             # Classifies hand pose every frame
-│   ├── AirScrollAccessibilityService.kt # Injects tap and swipe gestures system-wide
+│   ├── YvoraAccessibilityService.kt # Injects tap and swipe gestures system-wide
 │   ├── HandLandmarkerHelper.kt          # Converts camera frames and runs MediaPipe
 │   └── MainActivity.kt                  # User interface — start, stop, permissions
 └── res/                                 # UI layouts and resources
@@ -119,16 +119,16 @@ On Android 13 and above, sideloaded APKs (installed from
 a file rather than the Play Store) are restricted from
 accessing Accessibility Services by default.
 
-If AeroNav does not appear in Accessibility Settings or
+If Yvora does not appear in Accessibility Settings or
 shows a "Restricted setting" error, follow these steps:
 
 1. Go to Settings → Apps
-2. Find AeroNav in the app list
+2. Find Yvora in the app list
 3. Tap the three-dot menu (⋮) in the top right
 4. Tap "Allow restricted settings"
 5. Confirm with your PIN, password, or fingerprint
 6. Return to Accessibility Settings
-7. AeroNav should now appear and can be toggled ON
+7. Yvora should now appear and can be toggled ON
 
 This is a one-time step required by Android for security.
 
@@ -138,3 +138,10 @@ This is a one-time step required by Android for security.
 ## 📜 License
 
 MIT License
+
+
+## Attribution
+
+Yvora is a modified fork of [AeroNav](https://github.com/omhujband/Aeronav), distributed under the original MIT license. See [LICENSE](LICENSE) for the retained copyright and license notice.
+
+Build a branded experimental APK with `./gradlew :app:packageYvoraDebug`. The copy is written to `app/build/outputs/yvora/Yvora-debug.apk` after a successful Android build. The application ID is `com.yvora.app`; permissions must be granted separately from AeroNav.

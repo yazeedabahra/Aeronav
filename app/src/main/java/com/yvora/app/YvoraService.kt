@@ -1,4 +1,4 @@
-package com.example.airscroll
+package com.yvora.app
 
 import android.annotation.SuppressLint
 import android.app.ActivityManager
@@ -38,7 +38,7 @@ import com.google.mediapipe.tasks.vision.handlandmarker.HandLandmarker
 import com.google.mediapipe.tasks.vision.handlandmarker.HandLandmarkerResult
 import java.util.concurrent.atomic.AtomicBoolean
 
-class AirScrollService : LifecycleService() {
+class YvoraService : LifecycleService() {
 
     // -------------------------------------------------------
     // STATUS LISTENER INTERFACE
@@ -55,11 +55,11 @@ class AirScrollService : LifecycleService() {
     }
 
     companion object {
-        private const val TAG = "AirScrollService"
-        private const val CHANNEL_ID = "airscroll_channel"
+        private const val TAG = "YvoraService"
+        private const val CHANNEL_ID = "yvora_channel"
         private const val NOTIFICATION_ID = 1001
 
-        var instance: AirScrollService? = null
+        var instance: YvoraService? = null
         var statusListener: StatusListener? = null
 
         const val ACTION_START = "START"
@@ -483,19 +483,19 @@ class AirScrollService : LifecycleService() {
         if (state.triggeredGesture != null) {
             when (state.triggeredGesture) {
                 "UP" -> {
-                    AirScrollAccessibilityService.performScroll("up")
+                    YvoraAccessibilityService.performScroll("up")
                     Log.d(TAG, "SCROLL UP")
                 }
                 "DOWN" -> {
-                    AirScrollAccessibilityService.performScroll("down")
+                    YvoraAccessibilityService.performScroll("down")
                     Log.d(TAG, "SCROLL DOWN")
                 }
                 "LEFT" -> {
-                    AirScrollAccessibilityService.performScroll("left")
+                    YvoraAccessibilityService.performScroll("left")
                     Log.d(TAG, "SWIPE LEFT")
                 }
                 "RIGHT" -> {
-                    AirScrollAccessibilityService.performScroll("right")
+                    YvoraAccessibilityService.performScroll("right")
                     Log.d(TAG, "SWIPE RIGHT")
                 }
             }
@@ -504,7 +504,7 @@ class AirScrollService : LifecycleService() {
 
         // Tap
         if (state.triggeredTap) {
-            AirScrollAccessibilityService.performTap(pointerX, pointerY)
+            YvoraAccessibilityService.performTap(pointerX, pointerY)
             flashPointer()
             Log.d(TAG, "Tap at ($pointerX, $pointerY)")
         }
@@ -636,7 +636,7 @@ class AirScrollService : LifecycleService() {
     // -------------------------------------------------------
 
     private fun buildNotification(): Notification {
-        val stopIntent = Intent(this, AirScrollService::class.java).apply {
+        val stopIntent = Intent(this, YvoraService::class.java).apply {
             action = ACTION_STOP
         }
         val stopPending = PendingIntent.getService(
@@ -651,7 +651,7 @@ class AirScrollService : LifecycleService() {
 
         return if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
             Notification.Builder(this, CHANNEL_ID)
-                .setContentTitle("AeroNav Running")
+                .setContentTitle("Yvora Running")
                 .setContentText("Hand gesture navigation active")
                 .setSmallIcon(android.R.drawable.ic_menu_camera)
                 .setContentIntent(openPending)
@@ -661,7 +661,7 @@ class AirScrollService : LifecycleService() {
         } else {
             @Suppress("DEPRECATION")
             Notification.Builder(this)
-                .setContentTitle("AirScroll Running")
+                .setContentTitle("Yvora Running")
                 .setContentText("Hand gestures active")
                 .setSmallIcon(android.R.drawable.ic_menu_camera)
                 .setContentIntent(openPending)
@@ -674,7 +674,7 @@ class AirScrollService : LifecycleService() {
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
             val channel = NotificationChannel(
                 CHANNEL_ID,
-                "AirScroll Service",
+                "Yvora Service",
                 NotificationManager.IMPORTANCE_LOW
             ).apply { setShowBadge(false) }
             getSystemService(NotificationManager::class.java)

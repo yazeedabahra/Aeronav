@@ -1,4 +1,4 @@
-package com.example.airscroll
+package com.yvora.app
 
 import kotlin.math.hypot
 

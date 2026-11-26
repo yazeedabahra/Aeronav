@@ -3,12 +3,12 @@ plugins {
 }
 
 android {
-    namespace = "com.example.airscroll"
+    namespace = "com.yvora.app"
     // Updated to API 35
     compileSdk = 35
 
     defaultConfig {
-        applicationId = "com.example.airscroll"
+        applicationId = "com.yvora.app"
         minSdk = 24
         targetSdk = 35
         versionCode = 1
@@ -69,4 +69,14 @@ dependencies {
     testImplementation(libs.junit)
     androidTestImplementation(libs.androidx.junit)
     androidTestImplementation(libs.androidx.espresso.core)
+}
+
+// Branded copy of the assembled single debug APK; original AGP output remains intact.
+tasks.register<Copy>("packageYvoraDebug") {
+    dependsOn("assembleDebug")
+    from(layout.buildDirectory.dir("outputs/apk/debug")) {
+        include("app-debug.apk")
+        rename("app-debug.apk", "Yvora-debug.apk")
+    }
+    into(layout.buildDirectory.dir("outputs/yvora"))
 }

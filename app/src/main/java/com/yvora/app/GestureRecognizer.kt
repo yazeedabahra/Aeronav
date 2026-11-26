@@ -1,4 +1,4 @@
-package com.example.airscroll
+package com.yvora.app
 
 import com.google.mediapipe.tasks.components.containers.NormalizedLandmark
 import com.google.mediapipe.tasks.vision.handlandmarker.HandLandmarkerResult
