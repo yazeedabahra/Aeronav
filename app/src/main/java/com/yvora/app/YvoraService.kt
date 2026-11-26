@@ -7,6 +7,11 @@ import android.app.NotificationChannel
 import android.app.NotificationManager
 import android.app.PendingIntent
 import android.content.Intent
+import android.content.BroadcastReceiver
+import android.content.Context
+import android.content.IntentFilter
+import android.os.BatteryManager
+import android.os.PowerManager
 import android.graphics.Bitmap
 import android.graphics.Matrix
 import android.graphics.PixelFormat
@@ -17,16 +22,13 @@ import android.os.Looper
 import android.os.SystemClock
 import android.provider.Settings
 import android.util.Log
-import android.util.Size
 import android.view.Gravity
 import android.view.LayoutInflater
 import android.view.View
 import android.view.WindowManager
-import android.widget.FrameLayout
 import androidx.camera.core.CameraSelector
 import androidx.camera.core.ImageAnalysis
 import androidx.camera.core.ImageProxy
-import androidx.camera.core.Preview
 import androidx.camera.lifecycle.ProcessCameraProvider
 import androidx.core.content.ContextCompat
 import androidx.lifecycle.LifecycleService
@@ -72,7 +74,6 @@ class YvoraService : LifecycleService() {
     // FIELDS
     // -------------------------------------------------------
     private var windowManager: WindowManager? = null
-    private var cameraOverlayView: View? = null
     private var pointerView: View? = null
     private var pointerParams: WindowManager.LayoutParams? = null
 
@@ -80,6 +81,45 @@ class YvoraService : LifecycleService() {
     private val gestureRecognizer = GestureRecognizer()
     private lateinit var cameraExecutor: java.util.concurrent.ExecutorService
     private var cameraProvider: ProcessCameraProvider? = null
+    private var analysisUseCase: ImageAnalysis? = null
+    @Volatile private var cameraRunning = false
+    @Volatile private var cameraEpoch = 0L
+    private var cameraStarting = false
+    private var modelReady = false
+    private lateinit var thermalPolicy: ThermalPolicy
+    private lateinit var powerManager: PowerManager
+    private var receiverRegistered = false
+    @Volatile private var analysisIntervalMs = 250L
+    private var thermalLevel = 0
+    private var batteryTenths: Int? = null
+    var pauseReason: String? = null
+        private set
+    val powerStatus: String
+        get() {
+            val battery = batteryTenths?.let { " • Battery ${it / 10f}°C" } ?: ""
+            val level = if (Build.VERSION.SDK_INT >= 29) {
+                when (thermalLevel) {
+                    0 -> "Normal"
+                    1 -> "Light"
+                    2 -> "Moderate"
+                    else -> "Severe or higher"
+                }
+            } else "Thermal status unavailable"
+            return (pauseReason ?: "Thermal: $level • Target ${1000 / analysisIntervalMs} /s") + battery
+        }
+
+    private val powerReceiver = object : BroadcastReceiver() {
+        override fun onReceive(context: Context?, intent: Intent?) {
+            if (!stopped && started) refreshPowerState()
+        }
+    }
+    private val powerTick = object : Runnable {
+        override fun run() {
+            if (stopped || !started) return
+            refreshPowerState()
+            mainHandler.postDelayed(this, 2000L)
+        }
+    }
 
     private var pointerX = 0f
     private var pointerY = 0f
@@ -177,8 +217,9 @@ class YvoraService : LifecycleService() {
         lowRamDevice = activityManager.isLowRamDevice || activityManager.memoryClass <= 128
         cameraDetail = CameraSettings.readDetail(this)
         gestureRecognizer.setControlRange(CameraSettings.readRange(this))
-        // Preserve the existing pacing; distance detail can cost more per frame.
         framePacer = FramePacer(if (lowRamDevice) 100L else 66L)
+        thermalPolicy = ThermalPolicy(lowRamDevice)
+        powerManager = getSystemService(POWER_SERVICE) as PowerManager
 
         val metrics = resources.displayMetrics
         screenWidth = metrics.widthPixels
@@ -206,12 +247,14 @@ class YvoraService : LifecycleService() {
                 setupOverlayWindows()
                 forceHidePointer()
                 gestureRecognizer.reset()
+                registerPowerMonitoring()
                 cameraExecutor.execute {
                     if (!stopped) initMediaPipe()
                     val ready = handLandmarker != null
                     mainHandler.post {
                         if (!stopped) {
-                            if (ready) startCamera() else stopSelf()
+                            modelReady = ready
+                            if (ready) refreshPowerState() else stopSelf()
                         }
                     }
                 }
@@ -228,6 +271,11 @@ class YvoraService : LifecycleService() {
 
     override fun onDestroy() {
         stopped = true
+        if (receiverRegistered) {
+            unregisterReceiver(powerReceiver)
+            receiverRegistered = false
+        }
+        stopCamera()
         cancelDrag()
         super.onDestroy()
         Log.d(TAG, "onDestroy")
@@ -255,9 +303,6 @@ class YvoraService : LifecycleService() {
         try {
             if (isPointerAdded && pointerView != null) {
                 windowManager?.removeView(pointerView)
-            }
-            if (cameraOverlayView != null) {
-                windowManager?.removeView(cameraOverlayView)
             }
         } catch (e: Exception) {
             Log.e(TAG, "removeView error: ${e.message}")
@@ -289,34 +334,6 @@ class YvoraService : LifecycleService() {
         } else {
             @Suppress("DEPRECATION")
             WindowManager.LayoutParams.TYPE_PHONE
-        }
-
-        // 1x1 invisible camera preview overlay
-        val cameraParams = WindowManager.LayoutParams(
-            1, 1,
-            overlayType,
-            WindowManager.LayoutParams.FLAG_NOT_FOCUSABLE
-                    or WindowManager.LayoutParams.FLAG_NOT_TOUCHABLE
-                    or WindowManager.LayoutParams.FLAG_LAYOUT_IN_SCREEN,
-            PixelFormat.TRANSLUCENT
-        ).apply {
-            gravity = Gravity.TOP or Gravity.START
-            x = 0
-            y = 0
-        }
-
-        val cameraContainer = FrameLayout(this)
-        val previewView = androidx.camera.view.PreviewView(this).apply {
-            layoutParams = FrameLayout.LayoutParams(1, 1)
-        }
-        cameraContainer.addView(previewView)
-        cameraOverlayView = cameraContainer
-
-        try {
-            windowManager?.addView(cameraOverlayView, cameraParams)
-            Log.d(TAG, "Camera overlay added")
-        } catch (e: Exception) {
-            Log.e(TAG, "Camera overlay failed: ${e.message}", e)
         }
 
         // Visible pointer overlay
@@ -413,50 +430,97 @@ class YvoraService : LifecycleService() {
     // CAMERA
     // -------------------------------------------------------
 
-    private fun startCamera() {
-        if (stopped) return
-        val previewView = (cameraOverlayView as? FrameLayout)
-            ?.getChildAt(0) as? androidx.camera.view.PreviewView
-
-        if (previewView == null) {
-            Log.e(TAG, "PreviewView not found")
-            return
+    private fun registerPowerMonitoring() {
+        val filter = IntentFilter().apply {
+            addAction(Intent.ACTION_SCREEN_OFF)
+            addAction(Intent.ACTION_SCREEN_ON)
+            addAction(PowerManager.ACTION_POWER_SAVE_MODE_CHANGED)
         }
+        ContextCompat.registerReceiver(this, powerReceiver, filter, ContextCompat.RECEIVER_NOT_EXPORTED)
+        receiverRegistered = true
+        powerTick.run()
+    }
 
+    private fun refreshPowerState() {
+        if (stopped) return
+        val now = SystemClock.uptimeMillis()
+        thermalLevel = if (Build.VERSION.SDK_INT >= 29) powerManager.currentThermalStatus else 0
+        val battery = registerReceiver(null, IntentFilter(Intent.ACTION_BATTERY_CHANGED))
+        batteryTenths = battery?.getIntExtra(BatteryManager.EXTRA_TEMPERATURE, Int.MIN_VALUE)
+            ?.takeIf { it in 0..1000 }
+        thermalPolicy.environment(now, thermalLevel, batteryTenths, powerManager.isPowerSaveMode)
+        analysisIntervalMs = thermalPolicy.interval(now)
+        val reason = when {
+            !powerManager.isInteractive -> "Screen off • Camera paused"
+            thermalPolicy.cooling -> "Cooling • Camera paused"
+            else -> null
+        }
+        val changed = reason != pauseReason
+        pauseReason = reason
+        if (reason != null) {
+            if (cameraRunning || cameraStarting) stopCamera()
+            statusListener?.onStatus(false, "Paused", false, false, reason)
+        } else if (modelReady && !cameraRunning && !cameraStarting) {
+            startCamera()
+        }
+        if (changed) {
+            getSystemService(NotificationManager::class.java)?.notify(NOTIFICATION_ID, buildNotification())
+        }
+    }
+
+    private fun stopCamera() {
+        cameraRunning = false
+        cameraStarting = false
+        cameraEpoch++
+        val analysis = analysisUseCase
+        analysisUseCase = null
+        try {
+            analysis?.clearAnalyzer()
+            if (analysis != null) cameraProvider?.unbind(analysis)
+        } catch (e: Exception) {
+            Log.w(TAG, "Camera unbind failed", e)
+        }
+        cancelDrag()
+        gestureRecognizer.reset()
+        needsOpenHand = true
+        thermalPolicy.observe(SystemClock.uptimeMillis(), false, 0f, 0f, 0, false)
+        sampleX = Float.NaN
+        sampleY = Float.NaN
+        resultRate = 0f
+        frameAgeMs = -1L
+        rateWindowStart = -1L
+        rateWindowCount = 0
+        pointerView?.visibility = View.GONE
+        isPointerVisible = false
+    }
+
+    private fun startCamera() {
+        if (stopped || pauseReason != null || cameraRunning || cameraStarting || !modelReady) return
+        cameraStarting = true
+        val epoch = ++cameraEpoch
         val cameraProviderFuture = ProcessCameraProvider.getInstance(this)
         cameraProviderFuture.addListener({
-            if (stopped) return@addListener
+            if (stopped || epoch != cameraEpoch || pauseReason != null) return@addListener
             try {
-                cameraProvider = cameraProviderFuture.get()
-
-                val preview = Preview.Builder().build()
-                preview.setSurfaceProvider(previewView.surfaceProvider)
-
+                val provider = cameraProviderFuture.get()
+                cameraProvider = provider
                 val imageAnalysis = ImageAnalysis.Builder()
                     .setTargetResolution(cameraDetail.requestedSize(lowRamDevice))
                     .setBackpressureStrategy(ImageAnalysis.STRATEGY_KEEP_ONLY_LATEST)
                     .build()
-
                 imageAnalysis.setAnalyzer(cameraExecutor) { imageProxy ->
-                    processFrame(imageProxy)
+                    processFrame(imageProxy, epoch)
                 }
-
-                val cameraSelector = CameraSelector.Builder()
-                    .requireLensFacing(CameraSelector.LENS_FACING_FRONT)
-                    .build()
-
-                cameraProvider?.unbindAll()
-                cameraProvider?.bindToLifecycle(
-                    this,
-                    cameraSelector,
-                    preview,
-                    imageAnalysis
-                )
-
-                Log.d(TAG, "Camera started")
-
+                analysisUseCase = imageAnalysis
+                val selector = CameraSelector.DEFAULT_FRONT_CAMERA
+                cameraRunning = true
+                provider.bindToLifecycle(this, selector, imageAnalysis)
+                cameraStarting = false
+                Log.d(TAG, "Analysis-only camera started")
             } catch (e: Exception) {
-                Log.e(TAG, "Camera start failed: ${e.message}", e)
+                Log.e(TAG, "Camera start failed", e)
+                stopCamera()
+                stopSelf()
             }
         }, ContextCompat.getMainExecutor(this))
     }
@@ -465,11 +529,11 @@ class YvoraService : LifecycleService() {
     // FRAME PROCESSING
     // -------------------------------------------------------
 
-    private fun processFrame(imageProxy: ImageProxy) {
+    private fun processFrame(imageProxy: ImageProxy, epoch: Long) {
         val frameTime = SystemClock.uptimeMillis()
         val detector = handLandmarker
         // Drop before doing expensive conversion. Only one UI result can be pending.
-        if (stopped || detector == null || resultPending.get() || !framePacer.canStart(frameTime)) {
+        if (stopped || !cameraRunning || epoch != cameraEpoch || detector == null || resultPending.get() || !framePacer.canStart(frameTime, analysisIntervalMs)) {
             imageProxy.close()
             return
         }
@@ -496,10 +560,10 @@ class YvoraService : LifecycleService() {
             } finally {
                 mpImage.close()
             }
-            if (!stopped && resultPending.compareAndSet(false, true)) {
+            if (!stopped && cameraRunning && epoch == cameraEpoch && resultPending.compareAndSet(false, true)) {
                 val posted = mainHandler.post {
                     try {
-                        if (!stopped) {
+                        if (!stopped && cameraRunning && epoch == cameraEpoch) {
                             if (SystemClock.uptimeMillis() - frameTime <= 500L) {
                                 recordTelemetry(frameTime)
                                 onHandLandmarkerResult(result, width, height)
@@ -531,6 +595,10 @@ class YvoraService : LifecycleService() {
 
     private fun onHandLandmarkerResult(result: HandLandmarkerResult, width: Int, height: Int) {
         val state = gestureRecognizer.processResult(result, width, height)
+        val now = SystemClock.uptimeMillis()
+        thermalPolicy.observe(now, state.handDetected, state.rawX, state.rawY, state.fingersUp,
+            state.isTapPinching || state.gestureArmed || state.pinchAction != PinchAction.NONE && state.handDetected)
+        analysisIntervalMs = thermalPolicy.interval(now)
         sampleX = state.rawX
         sampleY = state.rawY
         analysisWidth = width
@@ -810,7 +878,7 @@ class YvoraService : LifecycleService() {
         return if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
             Notification.Builder(this, CHANNEL_ID)
                 .setContentTitle("Yvora Running")
-                .setContentText("Hand gesture navigation active")
+                .setContentText(pauseReason ?: "Hand gesture navigation active")
                 .setSmallIcon(android.R.drawable.ic_menu_camera)
                 .setContentIntent(openPending)
                 .addAction(android.R.drawable.ic_delete, "Stop", stopPending)
@@ -820,7 +888,7 @@ class YvoraService : LifecycleService() {
             @Suppress("DEPRECATION")
             Notification.Builder(this)
                 .setContentTitle("Yvora Running")
-                .setContentText("Hand gestures active")
+                .setContentText(pauseReason ?: "Hand gestures active")
                 .setSmallIcon(android.R.drawable.ic_menu_camera)
                 .setContentIntent(openPending)
                 .setOngoing(true)

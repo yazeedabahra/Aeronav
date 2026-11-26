@@ -68,6 +68,7 @@ class MainActivity : AppCompatActivity() {
             runOnUiThread {
                 val service = YvoraService.instance ?: return@runOnUiThread
                 val mode = when {
+                    service.pauseReason != null -> service.pauseReason!!
                     !handDetected -> "Searching for hand"
                     debugInfo == "Dragging" -> "Dragging • Open fingers to drop"
                     isTapPinching -> "Pinch held"
@@ -93,13 +94,13 @@ class MainActivity : AppCompatActivity() {
                 if (summary != previousStatus || now - lastUiUpdate >= 250L) {
                     previousStatus = summary
                     lastUiUpdate = now
-                    txtEngineState.text = if (handDetected) "Tracking active" else "Searching"
+                    txtEngineState.text = if (service.pauseReason != null) "Paused" else if (handDetected) "Tracking active" else "Searching"
                     txtEngineState.setTextColor(tint(if (handDetected) R.color.accent_green else R.color.accent))
                     txtStatus.text = summary
                     val rate = service.resultRate
                     txtResultRate.text = if (rate > 0f) String.format(java.util.Locale.ROOT, "%.1f", rate) + " /s" else "—"
                     txtFrameAge.text = if (service.frameAgeMs >= 0) "${service.frameAgeMs} ms" else "—"
-                    txtProfile.text = if (service.isLowRamProfile) "Adaptive pacing • Low-memory profile" else "Adaptive pacing • Standard profile"
+                    txtProfile.text = service.powerStatus
                     btnStart.text = "ENGINE\nACTIVE"
                 }
             }
