@@ -1,17 +1,15 @@
 package com.example.airscroll
 
 import android.annotation.SuppressLint
+import android.app.ActivityManager
 import android.app.Notification
 import android.app.NotificationChannel
 import android.app.NotificationManager
 import android.app.PendingIntent
 import android.content.Intent
 import android.graphics.Bitmap
-import android.graphics.ImageFormat
 import android.graphics.Matrix
 import android.graphics.PixelFormat
-import android.graphics.Rect
-import android.graphics.YuvImage
 import android.os.Build
 import android.os.Handler
 import android.os.IBinder
@@ -33,13 +31,12 @@ import androidx.camera.lifecycle.ProcessCameraProvider
 import androidx.core.content.ContextCompat
 import androidx.lifecycle.LifecycleService
 import com.google.mediapipe.framework.image.BitmapImageBuilder
-import com.google.mediapipe.framework.image.MPImage
 import com.google.mediapipe.tasks.core.BaseOptions
 import com.google.mediapipe.tasks.core.Delegate
 import com.google.mediapipe.tasks.vision.core.RunningMode
 import com.google.mediapipe.tasks.vision.handlandmarker.HandLandmarker
 import com.google.mediapipe.tasks.vision.handlandmarker.HandLandmarkerResult
-import java.io.ByteArrayOutputStream
+import java.util.concurrent.atomic.AtomicBoolean
 
 class AirScrollService : LifecycleService() {
 
@@ -93,8 +90,14 @@ class AirScrollService : LifecycleService() {
     private var isPointerAdded = false
 
     private val mainHandler = Handler(Looper.getMainLooper())
-    private val smoothAlpha = 0.20f
     private val deadZone = 3f
+    private var started = false
+    @Volatile private var stopped = false
+    private val resultPending = AtomicBoolean(false)
+    private lateinit var framePacer: FramePacer
+    private var lowRamDevice = false
+    private var lastFrameTimestamp = -1L
+    private var lastPointerColor: Int? = null
 
     // -------------------------------------------------------
     // LIFECYCLE
@@ -106,6 +109,9 @@ class AirScrollService : LifecycleService() {
         Log.d(TAG, "onCreate")
 
         cameraExecutor = java.util.concurrent.Executors.newSingleThreadExecutor()
+        val activityManager = getSystemService(ACTIVITY_SERVICE) as ActivityManager
+        lowRamDevice = activityManager.isLowRamDevice || activityManager.memoryClass <= 128
+        framePacer = FramePacer(if (lowRamDevice) 100L else 66L)
 
         val metrics = resources.displayMetrics
         screenWidth = metrics.widthPixels
@@ -126,14 +132,21 @@ class AirScrollService : LifecycleService() {
                 return START_NOT_STICKY
             }
             else -> {
+                if (started || stopped) return START_STICKY
+                started = true
                 startForeground(NOTIFICATION_ID, buildNotification())
                 setupOverlayWindows()
-                // Hide any existing pointer from previous session
                 forceHidePointer()
-                // Reset gesture recognizer
                 gestureRecognizer.reset()
-                cameraExecutor.execute { initMediaPipe() }
-                mainHandler.postDelayed({ startCamera() }, 500)
+                cameraExecutor.execute {
+                    if (!stopped) initMediaPipe()
+                    val ready = handLandmarker != null
+                    mainHandler.post {
+                        if (!stopped) {
+                            if (ready) startCamera() else stopSelf()
+                        }
+                    }
+                }
             }
         }
 
@@ -146,6 +159,7 @@ class AirScrollService : LifecycleService() {
     }
 
     override fun onDestroy() {
+        stopped = true
         super.onDestroy()
         Log.d(TAG, "onDestroy")
 
@@ -161,11 +175,13 @@ class AirScrollService : LifecycleService() {
             Log.e(TAG, "unbind error: ${e.message}")
         }
 
-        cameraExecutor.shutdown()
-
-        try { handLandmarker?.close() } catch (e: Exception) {
-            Log.e(TAG, "landmarker close error: ${e.message}")
+        // Serialize native inference and close on the same worker.
+        cameraExecutor.execute {
+            try { handLandmarker?.close() } catch (e: Exception) {
+                Log.e(TAG, "landmarker close error: ${e.message}")
+            } finally { handLandmarker = null }
         }
+        cameraExecutor.shutdown()
 
         try {
             if (isPointerAdded && pointerView != null) {
@@ -277,6 +293,7 @@ class AirScrollService : LifecycleService() {
                 // Also reset pointer color to default
                 val inner = pointerView?.findViewById<View>(R.id.innerDot)
                 inner?.setBackgroundResource(R.drawable.pointer_inner)
+                lastPointerColor = android.graphics.Color.TRANSPARENT
                 Log.d(TAG, "Pointer force hidden and reset")
             } catch (e: Exception) {
                 Log.e(TAG, "forceHidePointer error: ${e.message}")
@@ -307,11 +324,7 @@ class AirScrollService : LifecycleService() {
                 .setMinTrackingConfidence(0.5f)
                 .setMinHandPresenceConfidence(0.5f)
                 .setNumHands(1)
-                .setRunningMode(RunningMode.LIVE_STREAM)
-                .setResultListener(this::onHandLandmarkerResult)
-                .setErrorListener { e ->
-                    Log.e(TAG, "MediaPipe error: ${e.message}")
-                }
+                .setRunningMode(RunningMode.VIDEO)
                 .build()
 
             handLandmarker = HandLandmarker.createFromOptions(this, options)
@@ -327,6 +340,7 @@ class AirScrollService : LifecycleService() {
     // -------------------------------------------------------
 
     private fun startCamera() {
+        if (stopped) return
         val previewView = (cameraOverlayView as? FrameLayout)
             ?.getChildAt(0) as? androidx.camera.view.PreviewView
 
@@ -337,6 +351,7 @@ class AirScrollService : LifecycleService() {
 
         val cameraProviderFuture = ProcessCameraProvider.getInstance(this)
         cameraProviderFuture.addListener({
+            if (stopped) return@addListener
             try {
                 cameraProvider = cameraProviderFuture.get()
 
@@ -344,7 +359,7 @@ class AirScrollService : LifecycleService() {
                 preview.setSurfaceProvider(previewView.surfaceProvider)
 
                 val imageAnalysis = ImageAnalysis.Builder()
-                    .setTargetResolution(Size(480, 640))
+                    .setTargetResolution(if (lowRamDevice) Size(240, 320) else Size(360, 480))
                     .setBackpressureStrategy(ImageAnalysis.STRATEGY_KEEP_ONLY_LATEST)
                     .build()
 
@@ -378,115 +393,55 @@ class AirScrollService : LifecycleService() {
 
     private fun processFrame(imageProxy: ImageProxy) {
         val frameTime = SystemClock.uptimeMillis()
-        try {
-            val bitmap = convertToBitmap(imageProxy)
+        val detector = handLandmarker
+        // Drop before doing expensive conversion. Only one UI result can be pending.
+        if (stopped || detector == null || resultPending.get() || !framePacer.canStart(frameTime)) {
             imageProxy.close()
-
-            if (bitmap == null) return
-
+            return
+        }
+        framePacer.started(frameTime)
+        var proxyClosed = false
+        try {
+            val rotation = imageProxy.imageInfo.rotationDegrees
+            val bitmap = imageProxy.toBitmap()
+            imageProxy.close()
+            proxyClosed = true
             val matrix = Matrix().apply {
-                postRotate(imageProxy.imageInfo.rotationDegrees.toFloat())
-                postScale(-1f, 1f, bitmap.width / 2f, bitmap.height / 2f)
+                postRotate(rotation.toFloat())
+                postScale(-1f, 1f)
             }
-
-            val finalBitmap = Bitmap.createBitmap(
-                bitmap, 0, 0, bitmap.width, bitmap.height, matrix, true
-            )
-
-            val mpImage = BitmapImageBuilder(finalBitmap).build()
-            handLandmarker?.detectAsync(mpImage, frameTime)
-
+            val oriented = Bitmap.createBitmap(bitmap, 0, 0, bitmap.width, bitmap.height, matrix, true)
+            if (oriented !== bitmap) bitmap.recycle()
+            val width = oriented.width
+            val height = oriented.height
+            val mpImage = BitmapImageBuilder(oriented).build()
+            val timestamp = maxOf(frameTime, lastFrameTimestamp + 1L)
+            lastFrameTimestamp = timestamp
+            val result = try {
+                detector.detectForVideo(mpImage, timestamp)
+            } finally {
+                mpImage.close()
+            }
+            if (!stopped && resultPending.compareAndSet(false, true)) {
+                val posted = mainHandler.post {
+                    try {
+                        if (!stopped) {
+                            if (SystemClock.uptimeMillis() - frameTime <= 500L) {
+                                onHandLandmarkerResult(result, width, height)
+                            } else {
+                                gestureRecognizer.reset()
+                                hidePointer()
+                            }
+                        }
+                    } finally { resultPending.set(false) }
+                }
+                if (!posted) resultPending.set(false)
+            }
         } catch (e: Exception) {
             Log.e(TAG, "Frame error: ${e.message}")
-            try { imageProxy.close() } catch (_: Exception) {}
-        }
-    }
-
-    private fun convertToBitmap(imageProxy: ImageProxy): Bitmap? {
-        return try {
-            when (imageProxy.format) {
-                ImageFormat.YUV_420_888 -> yuvToBitmap(imageProxy)
-                ImageFormat.JPEG -> jpegToBitmap(imageProxy)
-                else -> yuvToBitmap(imageProxy)
-            }
-        } catch (e: Exception) {
-            Log.e(TAG, "Convert error: ${e.message}")
-            null
-        }
-    }
-
-    private fun yuvToBitmap(imageProxy: ImageProxy): Bitmap? {
-        return try {
-            val width = imageProxy.width
-            val height = imageProxy.height
-
-            val yPlane = imageProxy.planes[0]
-            val uPlane = imageProxy.planes[1]
-            val vPlane = imageProxy.planes[2]
-
-            val yRowStride = yPlane.rowStride
-            val uvRowStride = uPlane.rowStride
-            val uvPixelStride = uPlane.pixelStride
-
-            val yData = ByteArray(yPlane.buffer.remaining())
-            val uData = ByteArray(uPlane.buffer.remaining())
-            val vData = ByteArray(vPlane.buffer.remaining())
-
-            yPlane.buffer.get(yData)
-            uPlane.buffer.get(uData)
-            vPlane.buffer.get(vData)
-
-            val nv21 = ByteArray(width * height * 3 / 2)
-
-            var nv21Index = 0
-            for (row in 0 until height) {
-                val srcOffset = row * yRowStride
-                val len = minOf(width, yData.size - srcOffset)
-                if (len <= 0) break
-                System.arraycopy(yData, srcOffset, nv21, nv21Index, len)
-                nv21Index += width
-            }
-
-            val uvHeight = height / 2
-            val uvWidth = width / 2
-            for (row in 0 until uvHeight) {
-                for (col in 0 until uvWidth) {
-                    val vIdx = minOf(
-                        row * uvRowStride + col * uvPixelStride,
-                        vData.size - 1
-                    )
-                    val uIdx = minOf(
-                        row * uvRowStride + col * uvPixelStride,
-                        uData.size - 1
-                    )
-                    if (nv21Index + 1 < nv21.size) {
-                        nv21[nv21Index] = vData[vIdx]
-                        nv21[nv21Index + 1] = uData[uIdx]
-                        nv21Index += 2
-                    }
-                }
-            }
-
-            val yuvImage = YuvImage(nv21, ImageFormat.NV21, width, height, null)
-            val out = ByteArrayOutputStream()
-            yuvImage.compressToJpeg(Rect(0, 0, width, height), 85, out)
-            val bytes = out.toByteArray()
-            android.graphics.BitmapFactory.decodeByteArray(bytes, 0, bytes.size)
-
-        } catch (e: Exception) {
-            Log.e(TAG, "YUV error: ${e.message}")
-            null
-        }
-    }
-
-    private fun jpegToBitmap(imageProxy: ImageProxy): Bitmap? {
-        return try {
-            val buf = imageProxy.planes[0].buffer
-            val bytes = ByteArray(buf.remaining())
-            buf.get(bytes)
-            android.graphics.BitmapFactory.decodeByteArray(bytes, 0, bytes.size)
-        } catch (e: Exception) {
-            null
+        } finally {
+            if (!proxyClosed) imageProxy.close()
+            framePacer.finished(SystemClock.uptimeMillis() - frameTime)
         }
     }
 
@@ -494,12 +449,8 @@ class AirScrollService : LifecycleService() {
     // MEDIAPIPE RESULT HANDLER
     // -------------------------------------------------------
 
-    private fun onHandLandmarkerResult(result: HandLandmarkerResult, input: MPImage) {
-        val state = gestureRecognizer.processResult(
-            result,
-            input.width,
-            input.height
-        )
+    private fun onHandLandmarkerResult(result: HandLandmarkerResult, width: Int, height: Int) {
+        val state = gestureRecognizer.processResult(result, width, height)
 
         // Pointer — only move when in pointer mode (open hand)
         if (state.handDetected) {
@@ -597,8 +548,8 @@ class AirScrollService : LifecycleService() {
         val dy = targetY - pointerY
 
         if (Math.abs(dx) > deadZone || Math.abs(dy) > deadZone) {
-            pointerX += dx * smoothAlpha
-            pointerY += dy * smoothAlpha
+            pointerX = targetX
+            pointerY = targetY
         }
 
         val cx = pointerX.coerceIn(0f, (screenWidth - 60).toFloat())
@@ -606,10 +557,14 @@ class AirScrollService : LifecycleService() {
 
         mainHandler.post {
             try {
-                if (isPointerAdded && isPointerVisible) {
-                    pointerParams?.x = cx.toInt()
-                    pointerParams?.y = cy.toInt()
-                    windowManager?.updateViewLayout(pointerView, pointerParams)
+                if (!stopped && isPointerAdded && isPointerVisible) {
+                    val params = pointerParams ?: return@post
+                    val view = pointerView ?: return@post
+                    if (params.x != cx.toInt() || params.y != cy.toInt()) {
+                        params.x = cx.toInt()
+                        params.y = cy.toInt()
+                        windowManager?.updateViewLayout(view, params)
+                    }
                 }
             } catch (e: Exception) {
                 Log.e(TAG, "Pointer update error: ${e.message}")
@@ -655,8 +610,10 @@ class AirScrollService : LifecycleService() {
     }
 
     private fun setPointerColor(color: Int) {
+        if (lastPointerColor == color) return
         mainHandler.post {
             try {
+                if (stopped || lastPointerColor == color) return@post
                 val inner = pointerView?.findViewById<View>(R.id.innerDot)
                 if (color == android.graphics.Color.TRANSPARENT) {
                     // Reset to default red
@@ -667,6 +624,7 @@ class AirScrollService : LifecycleService() {
                     drawable.setColor(color)
                     inner?.background = drawable
                 }
+                lastPointerColor = color
             } catch (e: Exception) {
                 Log.e(TAG, "setPointerColor error: ${e.message}")
             }
