@@ -1,4 +1,4 @@
-package com.example.airscroll
+package com.yvora.app
 
 import android.accessibilityservice.AccessibilityService
 import android.accessibilityservice.GestureDescription
@@ -6,11 +6,11 @@ import android.graphics.Path
 import android.util.Log
 import android.view.accessibility.AccessibilityEvent
 
-class AirScrollAccessibilityService : AccessibilityService() {
+class YvoraAccessibilityService : AccessibilityService() {
 
     companion object {
         private const val TAG = "A11yService"
-        var instance: AirScrollAccessibilityService? = null
+        var instance: YvoraAccessibilityService? = null
 
         fun performScroll(direction: String): Boolean {
             return instance?.doScroll(direction) ?: false

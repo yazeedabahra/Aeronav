@@ -33,7 +33,7 @@
             <TextView
                 android:layout_width="wrap_content"
                 android:layout_height="wrap_content"
-                android:text="AeroNav"
+                android:text="@string/app_name"
                 android:textColor="@color/text_primary"
                 android:textSize="32sp"
                 android:textStyle="bold"
@@ -339,7 +339,7 @@
                 <TextView
                     android:layout_width="wrap_content"
                     android:layout_height="wrap_content"
-                    android:text="Tap Enable next to Overlay and Accessibility above. These let AeroNav draw the pointer and control your phone."
+                    android:text="Tap Enable next to Overlay and Accessibility above. These let Yvora draw the pointer and control your phone."
                     android:textColor="@color/text_secondary"
                     android:textSize="12sp"
                     android:layout_marginTop="2dp"
@@ -386,7 +386,7 @@
                 <TextView
                     android:layout_width="wrap_content"
                     android:layout_height="wrap_content"
-                    android:text="Tap Start or Run in Background. AeroNav will use your front camera to track your hand."
+                    android:text="Tap Start or Run in Background. Yvora will use your front camera to track your hand."
                     android:textColor="@color/text_secondary"
                     android:textSize="12sp"
                     android:layout_marginTop="2dp"
@@ -772,7 +772,7 @@
         <TextView
             android:layout_width="match_parent"
             android:layout_height="wrap_content"
-            android:text="AeroNav v1.0\nAll processing happens locally on your device.\nNo data is collected or transmitted."
+            android:text="Yvora v1.0\nAll processing happens locally on your device.\nNo data is collected or transmitted."
             android:textColor="@color/text_dim"
             android:textSize="11sp"
             android:gravity="center"

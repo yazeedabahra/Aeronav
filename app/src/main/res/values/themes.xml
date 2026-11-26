@@ -1,5 +1,5 @@
 <resources>
-    <style name="Theme.AirScroll" parent="Theme.Material3.DayNight.NoActionBar">
+    <style name="Theme.Yvora" parent="Theme.Material3.DayNight.NoActionBar">
         <item name="android:statusBarColor">@color/bg_primary</item>
         <item name="android:navigationBarColor">@color/bg_primary</item>
         <item name="android:windowBackground">@color/bg_primary</item>

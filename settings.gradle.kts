@@ -22,5 +22,5 @@ dependencyResolutionManagement {
     }
 }
 
-rootProject.name = "Air Scroll"
+rootProject.name = "Yvora"
 include(":app")

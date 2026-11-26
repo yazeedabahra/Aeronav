@@ -1,8 +1,9 @@
-package com.example.airscroll
+package com.yvora.app
 
 import com.google.mediapipe.tasks.components.containers.NormalizedLandmark
 import com.google.mediapipe.tasks.vision.handlandmarker.HandLandmarkerResult
 import kotlin.math.hypot
+import android.os.SystemClock
 
 class GestureRecognizer {
 
@@ -71,14 +72,13 @@ class GestureRecognizer {
     private var gestureCount = 0
 
     // Pointer smoothing
-    private var smoothPointerX = 0.5f
-    private var smoothPointerY = 0.5f
-    private val pointerAlpha   = 0.20f
+    private val pointerFilter = AdaptivePointerFilter()
 
     fun reset() {
         wasTapPinching = false
         currentGestureDirection = null
         gestureStartTime = 0L
+        pointerFilter.reset()
     }
 
     // -------------------------------------------------------
@@ -103,7 +103,7 @@ class GestureRecognizer {
         val landmarks = result.landmarks()[0]
         val w   = imageWidth.toFloat()
         val h   = imageHeight.toFloat()
-        val now = System.currentTimeMillis()
+        val now = SystemClock.uptimeMillis()
 
         // --- Handedness ---
         // MediaPipe returns handedness from camera perspective
@@ -117,13 +117,11 @@ class GestureRecognizer {
         }
 
         // --- Pointer position ---
-        val rawPX = listOf(0, 5, 9, 13, 17)
-            .map { landmarks[it].x() }.average().toFloat()
-        val rawPY = listOf(0, 5, 9, 13, 17)
-            .map { landmarks[it].y() }.average().toFloat()
-
-        smoothPointerX = pointerAlpha * rawPX + (1f - pointerAlpha) * smoothPointerX
-        smoothPointerY = pointerAlpha * rawPY + (1f - pointerAlpha) * smoothPointerY
+        val rawPX = (landmarks[0].x() + landmarks[5].x() + landmarks[9].x() +
+                landmarks[13].x() + landmarks[17].x()) / 5f
+        val rawPY = (landmarks[0].y() + landmarks[5].y() + landmarks[9].y() +
+                landmarks[13].y() + landmarks[17].y()) / 5f
+        pointerFilter.update(rawPX, rawPY, now)
 
         // --- Finger analysis ---
         val thumbUp  = isThumbExtended(landmarks, w, h)
@@ -132,7 +130,8 @@ class GestureRecognizer {
         val ringUp   = isFingerExtended(landmarks, 16, 14, 13, w, h)
         val pinkyUp  = isFingerExtended(landmarks, 20, 18, 17, w, h)
 
-        val fingersUp = listOf(indexUp, middleUp, ringUp, pinkyUp).count { it }
+        val fingersUp = (if (indexUp) 1 else 0) + (if (middleUp) 1 else 0) +
+                (if (ringUp) 1 else 0) + (if (pinkyUp) 1 else 0)
         val totalUp   = fingersUp + if (thumbUp) 1 else 0
 
         // --- Tap: index + thumb pinch ---
@@ -227,8 +226,8 @@ class GestureRecognizer {
 
         return GestureState(
             handDetected     = true,
-            pointerX         = smoothPointerX,
-            pointerY         = smoothPointerY,
+            pointerX         = pointerFilter.x,
+            pointerY         = pointerFilter.y,
             handedness       = handedness,
             fingersUp        = totalUp,
             isPointerMode    = isPointerMode,

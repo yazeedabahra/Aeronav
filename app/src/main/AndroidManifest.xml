@@ -15,7 +15,7 @@
         android:icon="@mipmap/ic_launcher"
         android:roundIcon="@mipmap/ic_launcher_round"
         android:label="@string/app_name"
-        android:theme="@style/Theme.AirScroll"
+        android:theme="@style/Theme.Yvora"
         android:supportsRtl="true">
 
         <activity
@@ -29,12 +29,13 @@
         </activity>
 
         <service
-            android:name=".AirScrollService"
+            android:name=".YvoraService"
             android:exported="false"
             android:foregroundServiceType="camera" />
 
         <service
-            android:name=".AirScrollAccessibilityService"
+            android:name=".YvoraAccessibilityService"
+            android:label="@string/app_name"
             android:exported="true"
             android:permission="android.permission.BIND_ACCESSIBILITY_SERVICE">
             <intent-filter>
