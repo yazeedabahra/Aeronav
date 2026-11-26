@@ -14,7 +14,7 @@ A native Android application that lets you control your entire phone using only 
 - **🎯 Dynamic Floating Pointer**: A colored pointer overlay tracks your hand and provides visual feedback.
 - **👌 Pinch to Tap**: Bring your index and thumb together to instantly tap anywhere on the screen.
 - **⬆️⬇️ Scroll Gestures**: Use single and double-finger gestures to scroll up or down (Right Hand).
-- **⬅️➡️ Swipe Gestures**: Use single and double-finger gestures to swipe left or right (Left Hand).
+- **⬅️➡️ Swipe Gestures**: Raise any three fingers on either hand and move in the desired horizontal direction.
 - **🔋 Background Execution**: Runs as a persistent foreground service, letting you control other apps seamlessly.
 - **🔒 Fully Offline**: No camera footage is stored or transmitted. Completely private.
 
