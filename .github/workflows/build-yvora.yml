@@ -1,0 +1,30 @@
+name: Build Yvora APK
+on:
+  push:
+    branches: [main]
+  workflow_dispatch:
+permissions:
+  contents: read
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    timeout-minutes: 25
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: '21'
+      - name: Prepare Android SDK
+        run: sdkmanager "platforms;android-35" "build-tools;36.0.0"
+      - name: Run tests and build debug APK
+        run: |
+          chmod +x gradlew
+          ./gradlew -Dorg.gradle.java.home="$JAVA_HOME" --no-daemon :app:testDebugUnitTest :app:packageYvoraDebug
+          test -s app/build/outputs/yvora/Yvora-debug.apk
+      - uses: actions/upload-artifact@v4
+        with:
+          name: Yvora-debug
+          path: app/build/outputs/yvora/Yvora-debug.apk
+          if-no-files-found: error
+          retention-days: 14
