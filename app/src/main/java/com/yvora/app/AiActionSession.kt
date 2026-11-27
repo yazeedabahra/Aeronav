@@ -19,7 +19,7 @@ import android.widget.Toast
 /**
  * Explicit local start on the visible target screen. No remote response can
  * invoke this directly. At most four navigation operations, no tap/type API.
- * All state and dispatch callbacks run on main. No screen text is collected.
+ * All state and dispatch callbacks run on main. Optional local structural inspection never reads screen text.
  */
 internal class AiActionSession(private val service:YvoraAccessibilityService) {
     private val handler=Handler(Looper.getMainLooper())
@@ -49,10 +49,13 @@ internal class AiActionSession(private val service:YvoraAccessibilityService) {
             text="Yvora AI: ${plan.size} navigation action(s). Choose screen, then Run here."
             setTextColor(Color.WHITE)
             textSize=13f
+            maxWidth=(service.resources.displayMetrics.widthPixels*.82f).toInt()
         }
         val run=Button(service).apply { text="Run here";isAllCaps=false }
         val stop=Button(service).apply { text="Stop AI";isAllCaps=false }
+        val inspect=Button(service).apply { text="Inspect screen locally";isAllCaps=false }
         layout.addView(caption)
+        layout.addView(inspect)
         layout.addView(LinearLayout(service).apply { orientation=LinearLayout.HORIZONTAL;addView(run);addView(stop) })
         val params=WindowManager.LayoutParams(WindowManager.LayoutParams.WRAP_CONTENT,
             WindowManager.LayoutParams.WRAP_CONTENT,WindowManager.LayoutParams.TYPE_ACCESSIBILITY_OVERLAY,
@@ -67,6 +70,11 @@ internal class AiActionSession(private val service:YvoraAccessibilityService) {
         YvoraService.instance?.forceHidePointer()
         run.setOnClickListener { if(active && !running && generation==token) begin(token) }
         stop.setOnClickListener { cancel("AI stopped by user") }
+        inspect.setOnClickListener {
+            if(!active || running || generation!=token || !unlocked() || SystemClock.uptimeMillis()>deadline) return@setOnClickListener
+            val structure=ScreenContext.inspect(service,::permitted)
+            caption.text=structure?.describe() ?: "Screen structure unavailable or restricted. Choose an ordinary app screen."
+        }
         handler.postDelayed({ if(active && generation==token && !running) cancel("AI plan expired") },25000L)
         return true
     }

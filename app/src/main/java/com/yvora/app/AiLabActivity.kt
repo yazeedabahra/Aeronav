@@ -145,7 +145,7 @@ class AiLabActivity : AppCompatActivity() {
             }
             androidx.appcompat.app.AlertDialog.Builder(this)
                 .setTitle("Prepare these navigation actions?")
-                .setMessage(approved.joinToString("\n") { it.name }+"\n\nChoose the destination app yourself, then press Run here on the floating AI control. Stop AI cancels remaining steps. No screen content is sent to the model.")
+                .setMessage(approved.joinToString("\n") { it.name }+"\n\nChoose the destination app yourself. Optionally Inspect screen locally for structural information, then press Run here on the floating AI control. Stop AI cancels remaining steps. No screen content is sent to the model.")
                 .setNegativeButton("Cancel",null)
                 .setPositiveButton("Prepare") { _,_ ->
                     if(plan!=approved || pending || android.os.SystemClock.uptimeMillis()-planAt>120000L) {
@@ -169,7 +169,7 @@ class AiLabActivity : AppCompatActivity() {
                 return@setOnClickListener
             }
             val state=YvoraService.instance?.diagnosticState() ?: "engine_running=false; live_metrics=unavailable"
-            val report="Yvora version 1.9-dev\n$state\n"+DiagnosticCounters.report()
+            val report="Yvora version 2.0-dev\n$state\n"+DiagnosticCounters.report()
             androidx.appcompat.app.AlertDialog.Builder(this)
                 .setTitle("Send only this report to ${provider.title}?")
                 .setMessage(report+"\n\nAPI usage may cost money. No screenshots or raw logs are included.")
