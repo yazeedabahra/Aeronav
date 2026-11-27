@@ -173,7 +173,12 @@ class MainActivity : LocalizedActivity() {
         findViewById<Button>(R.id.btnPersonalStudio).setOnClickListener { startActivity(Intent(this,PersonalGestureActivity::class.java)) }
         findViewById<Button>(R.id.btnFuzzyLab).setOnClickListener { startActivity(Intent(this,FuzzyLabActivity::class.java)) }
         findViewById<Button>(R.id.btnAiCore).setOnClickListener { startActivity(Intent(this, AiLabActivity::class.java)) }
-        requestPermissions()
+        findViewById<Button>(R.id.btnTutorial).setOnClickListener {
+            startActivity(Intent(this,TutorialActivity::class.java))
+        }
+        if(savedInstanceState==null && !TutorialPrefs.seen(this)) {
+            startActivity(Intent(this,TutorialActivity::class.java))
+        }
     }
 
     override fun onResume() {
@@ -350,6 +355,7 @@ class MainActivity : LocalizedActivity() {
         btnStart.setOnClickListener {
             if (!hasCamera()) {
                 toast(localized("Camera permission required","إذن الكاميرا مطلوب"))
+                requestPermissions()
                 return@setOnClickListener
             }
             if (!hasOverlay()) {
@@ -375,6 +381,7 @@ class MainActivity : LocalizedActivity() {
             }
             if (!hasCamera()) {
                 toast(localized("Camera permission required","إذن الكاميرا مطلوب"))
+                requestPermissions()
                 return@setOnClickListener
             }
             if (!hasOverlay()) {

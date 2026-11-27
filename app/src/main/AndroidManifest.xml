@@ -24,6 +24,7 @@
         <activity android:name=".FuzzyLabActivity" android:exported="false" />
         <activity android:name=".PersonalGestureActivity" android:exported="false" />
         <activity android:name=".TrajectoryStudioActivity" android:exported="false" />
+        <activity android:name=".TutorialActivity" android:exported="false" />
 
         <activity
             android:name=".MainActivity"

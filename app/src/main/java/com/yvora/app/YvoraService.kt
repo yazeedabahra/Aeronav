@@ -213,6 +213,13 @@ class YvoraService : LifecycleService() {
     private var lastFuzzyAt=-1L
     internal fun fuzzyTrace(slot:Int):FuzzyHandTrace =
         if(cameraRunning && lastFuzzyAt>=0 && SystemClock.uptimeMillis()-lastFuzzyAt<=750L) fuzzyTraces[slot] else FuzzyHandTrace()
+    internal fun tutorialSample(slot:Int):PracticeSample? {
+        if(!calibrationMode || !cameraRunning || identityAmbiguous || slot !in 0..1) return null
+        val trace=fuzzyTrace(slot)
+        if(!trace.present || lastFuzzyAt<0 || trace.quality<.55f) return null
+        return PracticeSample(lastFuzzyAt,sampleXs[slot],sampleYs[slot],trace.pinchRatio,
+            trace.candidate=="Pointer",trace.quality)
+    }
     internal fun fuzzyThermal():Float=thermalPolicy.fuzzyHeat
     internal fun fuzzyInterval():Long=analysisIntervalMs
     private fun clearFuzzyTraces() { cancelPoseTraining();cancelMotionTraining();motionClutch.reset();lastFuzzyAt=-1L;fuzzyTraces=Array(2){FuzzyHandTrace()};identity.reset();identityDegrees.fill(0f);predictionDegrees.fill(0f);identityAmbiguous=false;conflictStatus="None" }
