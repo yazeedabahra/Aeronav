@@ -300,7 +300,7 @@ class GestureRecognizer {
 
         fuzzyTrace=FuzzyHandTrace(true,labelScore,quality,knifePose.relaxedScore,assistedScore,
             horizontalSwipe.lastMembership,pointerFilter.tauSeconds,assistThreshold,assistEnabled,
-            triggeredGesture ?: gestureDirection ?: if(isPointerMode) "Pointer" else "None")
+            triggeredGesture ?: gestureDirection ?: if(isPointerMode) "Pointer" else "None",tapDist)
         return GestureState(
             handDetected     = true,
             pointerX         = pointerFilter.x,

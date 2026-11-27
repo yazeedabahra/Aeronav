@@ -13,6 +13,7 @@ import android.view.WindowManager
 /** Each hand has its own filtered position, gesture recognizer and overlay. Main thread only. */
 internal class HandCursor(val slot:Int) {
     val recognizer=GestureRecognizer()
+    val predictor=FuzzyMotionPredictor()
     private val baseColor=if(slot==0) Color.rgb(56,189,248) else Color.rgb(250,180,65)
     private var view:View?=null
     private var params:WindowManager.LayoutParams?=null
@@ -89,7 +90,7 @@ internal class HandCursor(val slot:Int) {
         lastColor=value
     }
     fun reset() {
-        recognizer.reset();initialized=false;armed=false;dragging=false;hide();color()
+        recognizer.reset();predictor.reset();initialized=false;armed=false;dragging=false;hide();color()
     }
     fun remove() {
         view?.let { try { wm?.removeView(it) } catch(_:RuntimeException) {} }

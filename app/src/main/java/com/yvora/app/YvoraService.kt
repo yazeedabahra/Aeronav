@@ -157,12 +157,21 @@ class YvoraService : LifecycleService() {
     // These methods are called only on the main thread.
     private var ranges=HandRanges()
     private var fuzzyTraces=Array(2){FuzzyHandTrace()}
+    private val identity=FuzzyHandIdentity()
+    private var identityDegrees=FloatArray(2)
+    private var identityAmbiguous=false
+    private var predictionDegrees=FloatArray(2)
+    private var conflictStatus="None"
+    internal fun identityDegree(slot:Int)=identityDegrees[slot]
+    internal fun predictionDegree(slot:Int)=predictionDegrees[slot]
+    internal fun conflictTrace()=conflictStatus
+    internal fun identityUncertain()=identityAmbiguous
     private var lastFuzzyAt=-1L
     internal fun fuzzyTrace(slot:Int):FuzzyHandTrace =
         if(cameraRunning && lastFuzzyAt>=0 && SystemClock.uptimeMillis()-lastFuzzyAt<=750L) fuzzyTraces[slot] else FuzzyHandTrace()
     internal fun fuzzyThermal():Float=thermalPolicy.fuzzyHeat
     internal fun fuzzyInterval():Long=analysisIntervalMs
-    private fun clearFuzzyTraces() { lastFuzzyAt=-1L;fuzzyTraces=Array(2){FuzzyHandTrace()} }
+    private fun clearFuzzyTraces() { lastFuzzyAt=-1L;fuzzyTraces=Array(2){FuzzyHandTrace()};identity.reset();identityDegrees.fill(0f);predictionDegrees.fill(0f);identityAmbiguous=false;conflictStatus="None" }
     private val trackingWatchdog=object:Runnable {
         override fun run() {
             if(stopped) return
@@ -594,10 +603,17 @@ class YvoraService : LifecycleService() {
 
     private fun onHandLandmarkerResult(result: HandLandmarkerResult, width: Int, height: Int) {
         val now=SystemClock.uptimeMillis()
-        val labels=result.landmarks().indices.map { index ->
-            result.handednesses().getOrNull(index)?.firstOrNull()?.takeIf { it.score() >= 0.65f }?.categoryName()
+        val observations=result.landmarks().mapIndexed { index,points ->
+            val label=result.handednesses().getOrNull(index)?.firstOrNull()
+            val ids=intArrayOf(0,5,9,13,17)
+            val px=if(points.size>=21) ids.sumOf { points[it].x().toDouble() }.toFloat()/5f else Float.NaN
+            val py=if(points.size>=21) ids.sumOf { points[it].y().toDouble() }.toFloat()/5f else Float.NaN
+            HandObservation(label?.categoryName(),label?.score() ?: 0f,px,py)
         }
-        val assignment=HandSlots.assign(labels)
+        val identification=identity.update(observations,now)
+        val assignment=identification.indices
+        identityDegrees=identification.degrees;identityAmbiguous=identification.ambiguous
+        predictionDegrees.fill(0f);conflictStatus="None"
         val states=cursors.mapIndexed { slot,cursor ->
             cursor.recognizer.processResult(result,width,height,handIndex=assignment[slot],frameAgeMs=frameAgeMs)
         }
@@ -642,11 +658,23 @@ class YvoraService : LifecycleService() {
             return
         }
         if(calibrationMode) {
-            forceHidePointer()
+            // Reset touch state, but keep identity and prediction history available for lab.
+            for(i in 0..1) if(states[i].handDetected && states[i].isPointerMode) {
+                val state=states[i]
+                predictionDegrees[i]=cursors[i].predictor.update(state.pointerX,state.pointerY,now,frameAgeMs,fuzzyTraces[i].quality).degree
+            } else cursors[i].predictor.reset()
+            cancelDrag()
+            cursors.forEach { it.hide();it.armed=false }
             statusListener?.onStatus(first!=null,"Calibration",false,false,"Safe calibration")
             return
         }
 
+        if(identityAmbiguous) {
+            forceHidePointer()
+            conflictStatus="Identity ambiguous: input suspended"
+            statusListener?.onStatus(false,"Identity uncertain",false,false,"Separate hands; open palm to re-arm")
+            return
+        }
         // Handle lost ownership before any new action. Never switch a held touch to another hand.
         touchArbiter.owner?.let { slot ->
             if(!states[slot].handDetected) {
@@ -656,6 +684,7 @@ class YvoraService : LifecycleService() {
             }
         }
         // Update both independent cursors even while another hand owns the touch stream.
+        val previouslyArmed=BooleanArray(2){cursors[it].armed}
         for(i in 0..1) {
             val state=states[i];val cursor=cursors[i]
             if(!state.handDetected) {
@@ -672,19 +701,38 @@ class YvoraService : LifecycleService() {
                 continue
             }
             if(state.isPointerMode && touchArbiter.owner!=i) {
-                cursor.position(state.pointerX,state.pointerY,screenWidth,screenHeight)
+                val prediction=cursor.predictor.update(state.pointerX,state.pointerY,now,frameAgeMs,
+                    FuzzyCore.and(fuzzyTraces[i].quality,identityDegrees[i]))
+                predictionDegrees[i]=prediction.degree
+                cursor.position(prediction.x,prediction.y,screenWidth,screenHeight)
                 cursor.color()
-            }
+            } else cursor.predictor.reset()
             cursor.show()
         }
 
         // Current owner first, otherwise deterministic slot order. Android dispatchGesture
         // cancels other streams; second hand remains free to move its cursor, not inject a touch.
         val owner=touchArbiter.owner
-        val order=if(owner==1) intArrayOf(1,0) else intArrayOf(0,1)
+        val candidates=(0..1).mapNotNull { i ->
+            val state=states[i];val tr=fuzzyTraces[i]
+            if(!state.handDetected || !previouslyArmed[i] || !cursors[i].armed) null
+            else if(state.pinchAction==PinchAction.PENDING) IntentCandidate(i,true,
+                FuzzyCore.and(tr.quality,FuzzyCore.fall(tr.pinchRatio,.12f,.34f)))
+            else if(state.triggeredGesture!=null) IntentCandidate(i,false,
+                FuzzyCore.and(tr.quality,if(state.triggeredGesture=="LEFT" || state.triggeredGesture=="RIGHT") tr.swipe else .8f))
+            else null
+        }
+        val chosen=FuzzyConflict.choose(owner,candidates)
+        if(candidates.size>1 || owner!=null && candidates.any { it.slot!=owner }) {
+            conflictStatus=if(chosen==null) "Ambiguous competing actions: abstain" else "Hand ${if(chosen==0) "left" else "right"} owns action"
+            candidates.filter{it.slot!=chosen}.forEach { losing ->
+                cursors[losing.slot].armed=false;cursors[losing.slot].recognizer.reset();cursors[losing.slot].predictor.reset()
+            }
+        }
+        val order=if(chosen==1) intArrayOf(1,0) else intArrayOf(0,1)
         for(i in order) {
             val state=states[i];val cursor=cursors[i]
-            if(!state.handDetected || !cursor.armed) continue
+            if(!state.handDetected || !cursor.armed || !previouslyArmed[i]) continue
             if(state.pinchAction!=PinchAction.NONE) {
                 when(state.pinchAction) {
                     PinchAction.PENDING -> {

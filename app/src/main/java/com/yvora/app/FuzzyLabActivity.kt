@@ -29,11 +29,14 @@ class FuzzyLabActivity:AppCompatActivity() {
             live.text=if(engine==null) "Engine stopped. Start Yvora to see live degrees."
                 else buildString {
                     append("Thermal membership: "+fmt(engine.fuzzyThermal())+" | analysis target: "+engine.fuzzyInterval()+" ms\n")
+                    append("Identity: "+if(engine.identityUncertain()) "ambiguous" else "no ambiguity detected")
+                    append("\nConflict: "+engine.conflictTrace()+"\n")
                     for(slot in 0..1) {
                         val tr=engine.fuzzyTrace(slot)
                         append(if(slot==0) "\nLEFT (cyan)" else "\nRIGHT (amber)")
                         if(!tr.present) { append(": no fresh hand result\n");continue }
                         append("\nHandedness score: "+fmt(tr.label)+" | quality: "+fmt(tr.quality))
+                        append("\nIdentity membership: "+fmt(engine.identityDegree(slot))+" | prediction: "+fmt(engine.predictionDegree(slot)))
                         append("\nRelaxed pose: "+fmt(tr.pose)+" | assisted rule: "+fmt(tr.assisted))
                         append("\nHorizontal motion: "+fmt(tr.swipe)+" | alpha: "+fmt(tr.threshold))
                         append("\nCandidate: "+tr.candidate+" | assist: "+if(tr.enabled) "on" else "off")
