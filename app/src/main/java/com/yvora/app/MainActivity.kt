@@ -146,6 +146,7 @@ class MainActivity : AppCompatActivity() {
                 }
             }
         }
+        findViewById<Button>(R.id.btnFuzzyLab).setOnClickListener { startActivity(Intent(this,FuzzyLabActivity::class.java)) }
         findViewById<Button>(R.id.btnAiCore).setOnClickListener { startActivity(Intent(this, AiLabActivity::class.java)) }
         requestPermissions()
     }

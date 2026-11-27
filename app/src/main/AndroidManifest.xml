@@ -20,6 +20,7 @@
         android:supportsRtl="true">
 
         <activity android:name=".AiLabActivity" android:exported="false" />
+        <activity android:name=".FuzzyLabActivity" android:exported="false" />
 
         <activity
             android:name=".MainActivity"
