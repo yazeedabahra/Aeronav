@@ -150,7 +150,7 @@ class GestureRecognizer {
                 landmarks[13].x() + landmarks[17].x()) / 5f
         val rawPY = (landmarks[0].y() + landmarks[5].y() + landmarks[9].y() +
                 landmarks[13].y() + landmarks[17].y()) / 5f
-        pointerFilter.update(controlRange.mapX(rawPX), controlRange.mapY(rawPY), now)
+        pointerFilter.update(controlRange.pointerX(rawPX), controlRange.pointerY(rawPY), now)
 
         // --- Finger analysis ---
         val thumbUp  = isThumbExtended(landmarks, w, h)

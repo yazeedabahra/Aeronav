@@ -148,7 +148,7 @@ class AiLabActivity : AppCompatActivity() {
                 return@setOnClickListener
             }
             val state=YvoraService.instance?.diagnosticState() ?: "engine_running=false; live_metrics=unavailable"
-            val report="Yvora version 1.5-dev\n$state\n"+DiagnosticCounters.report()
+            val report="Yvora version 1.6-dev\n$state\n"+DiagnosticCounters.report()
             androidx.appcompat.app.AlertDialog.Builder(this)
                 .setTitle("Send only this report to ${provider.title}?")
                 .setMessage(report+"\n\nAPI usage may cost money. No screenshots or raw logs are included.")

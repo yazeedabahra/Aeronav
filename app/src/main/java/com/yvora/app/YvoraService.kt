@@ -155,14 +155,40 @@ class YvoraService : LifecycleService() {
     val usingDistanceDetail: Boolean get() = cameraDetail == CameraDetail.DISTANCE
 
     // These methods are called only on the main thread.
-    internal fun updateControlRange(range: ControlRange) {
-        cancelDrag()
-        cursors.forEach { it.reset(); it.recognizer.setControlRange(range) }
+    private var ranges=HandRanges()
+    private val sampleXs=FloatArray(2){Float.NaN}
+    private val sampleYs=FloatArray(2){Float.NaN}
+    private var capture:RangeCapture?=null
+    internal fun sampleX(slot:Int)=sampleXs[slot]
+    internal fun sampleY(slot:Int)=sampleYs[slot]
+    internal fun captureCount():Int=capture?.count ?: 0
+    internal fun captureActive():Boolean=capture!=null
+    internal fun beginRangeCapture(slot:Int):Boolean {
+        if(slot !in 0..1 || !cameraRunning || !calibrationMode || YvoraAccessibilityService.aiActive()) return false
+        capture=RangeCapture(slot,SystemClock.uptimeMillis())
+        return true
+    }
+    internal fun cancelRangeCapture() { capture=null }
+    internal fun finishRangeCapture():ControlRange? {
+        val active=capture ?: return null
+        capture=null
+        return if(cameraRunning && calibrationMode) active.finish(SystemClock.uptimeMillis()) else null
+    }
+    internal fun updateControlRanges(value:HandRanges) {
+        if(ranges==value) return
+        if((0..1).any { ranges.effective(it)!=value.effective(it) }) {
+            cancelDrag()
+            cursors.forEachIndexed { slot,cursor ->
+                cursor.reset();cursor.recognizer.setControlRange(value.effective(slot))
+            }
+        }
+        ranges=value
     }
 
     internal fun setCalibrationMode(enabled: Boolean) {
         if (calibrationMode == enabled) return
         calibrationMode = enabled
+        cancelRangeCapture()
         forceHidePointer()
     }
     val isLowRamProfile: Boolean get() = lowRamDevice
@@ -206,9 +232,10 @@ class YvoraService : LifecycleService() {
         lowRamDevice = activityManager.isLowRamDevice || activityManager.memoryClass <= 128
         cameraDetail = CameraSettings.readDetail(this)
         dualHandMode = CameraSettings.readDualHand(this)
-        cursors.forEach {
-            it.recognizer.setControlRange(CameraSettings.readRange(this))
-            it.recognizer.configureAssist(CameraSettings.readAssist(this), CameraSettings.readAssistLevel(this))
+        ranges=CameraSettings.readRanges(this)
+        cursors.forEachIndexed { slot,cursor ->
+            cursor.recognizer.setControlRange(ranges.effective(slot))
+            cursor.recognizer.configureAssist(CameraSettings.readAssist(this), CameraSettings.readAssistLevel(this))
         }
         framePacer = FramePacer(if (lowRamDevice) 100L else 66L)
         thermalPolicy = ThermalPolicy(lowRamDevice)
@@ -404,6 +431,7 @@ class YvoraService : LifecycleService() {
         thermalPolicy.observe(SystemClock.uptimeMillis(), false, 0f, 0f, 0, false)
         sampleX = Float.NaN
         sampleY = Float.NaN
+        sampleXs.fill(Float.NaN);sampleYs.fill(Float.NaN);cancelRangeCapture()
         resultRate = 0f
         frameAgeMs = -1L
         rateWindowStart = -1L
@@ -523,6 +551,7 @@ class YvoraService : LifecycleService() {
                                 forceHidePointer()
                                 sampleX = Float.NaN
                                 sampleY = Float.NaN
+                                sampleXs.fill(Float.NaN);sampleYs.fill(Float.NaN);cancelRangeCapture()
                                 statusListener?.onStatus(false, "None", false, false, "")
                             }
                         }
@@ -568,6 +597,18 @@ class YvoraService : LifecycleService() {
         analysisIntervalMs=thermalPolicy.interval(now)
         sampleX=first?.rawX ?: Float.NaN
         sampleY=first?.rawY ?: Float.NaN
+        for(slot in 0..1) {
+            sampleXs[slot]=states[slot].rawX
+            sampleYs[slot]=states[slot].rawY
+        }
+        capture?.let { active ->
+            if(active.expired(now) || !calibrationMode || YvoraAccessibilityService.aiActive()) capture=null
+            else {
+                val state=states[active.slot]
+                if(state.handDetected && state.isPointerMode && !state.isTapPinching)
+                    active.add(state.rawX,state.rawY,now)
+            }
+        }
         analysisWidth=width;analysisHeight=height
         if(YvoraAccessibilityService.aiActive()) {
             // Explicit pinch or recognized swipe interrupts running AI, never injects a competing stroke.

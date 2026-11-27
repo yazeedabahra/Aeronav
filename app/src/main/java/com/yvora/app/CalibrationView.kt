@@ -15,20 +15,20 @@ class CalibrationView @JvmOverloads constructor(
     private val border = ContextCompat.getColor(context, R.color.divider)
     private val accent = ContextCompat.getColor(context, R.color.accent)
     private val dot = ContextCompat.getColor(context, R.color.accent_green)
-    private var range = ControlRange()
-    private var handX = Float.NaN
-    private var handY = Float.NaN
+    private var ranges=HandRanges()
+    private var selected=0
+    private val xs=FloatArray(2){Float.NaN}
+    private val ys=FloatArray(2){Float.NaN}
     private var aspect = 0.75f
+    private val colors=intArrayOf(android.graphics.Color.rgb(56,189,248),android.graphics.Color.rgb(250,180,65))
 
-    internal fun setRange(value: ControlRange) {
-        range = value
-        invalidate()
+    internal fun setRanges(value:HandRanges,slot:Int) {
+        ranges=value;selected=slot;invalidate()
     }
 
-    internal fun setSample(x: Float, y: Float, frameWidth: Int, frameHeight: Int) {
-        handX = x
-        handY = y
-        if (frameWidth > 0 && frameHeight > 0) aspect = frameWidth.toFloat() / frameHeight
+    internal fun setSamples(leftX:Float,leftY:Float,rightX:Float,rightY:Float,frameWidth:Int,frameHeight:Int) {
+        xs[0]=leftX;ys[0]=leftY;xs[1]=rightX;ys[1]=rightY
+        if(frameWidth>0 && frameHeight>0) aspect=frameWidth.toFloat()/frameHeight
         invalidate()
     }
 
@@ -45,14 +45,18 @@ class CalibrationView @JvmOverloads constructor(
         paint.strokeWidth = 2f * resources.displayMetrics.density
         paint.color = border
         canvas.drawRect(x, y, x + w, y + h, paint)
-        paint.color = accent
-        canvas.drawRect(x + range.left * w, y + range.top * h,
-            x + range.right * w, y + range.bottom * h, paint)
-        if (handX.isFinite() && handY.isFinite()) {
-            paint.style = Paint.Style.FILL
-            paint.color = dot
-            canvas.drawCircle(x + handX.coerceIn(0f, 1f) * w,
-                y + handY.coerceIn(0f, 1f) * h, 4f * resources.displayMetrics.density, paint)
+        val order=if(ranges.linked) intArrayOf(selected) else intArrayOf(1-selected,selected)
+        for(slot in order) {
+            val range=ranges.effective(slot)
+            paint.style=Paint.Style.STROKE
+            paint.strokeWidth=(if(slot==selected) 3f else 1.5f)*resources.displayMetrics.density
+            paint.color=if(ranges.linked) accent else colors[slot]
+            canvas.drawRect(x+range.left*w,y+range.top*h,x+range.right*w,y+range.bottom*h,paint)
+        }
+        for(slot in 0..1) if(xs[slot].isFinite() && ys[slot].isFinite()) {
+            paint.style=Paint.Style.FILL;paint.color=colors[slot]
+            canvas.drawCircle(x+xs[slot].coerceIn(0f,1f)*w,y+ys[slot].coerceIn(0f,1f)*h,
+                4f*resources.displayMetrics.density,paint)
         }
     }
 }

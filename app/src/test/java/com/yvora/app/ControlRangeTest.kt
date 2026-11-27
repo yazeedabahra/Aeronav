@@ -26,7 +26,7 @@ class ControlRangeTest {
     }
     @Test fun invalidSavedValuesAreBounded() {
         val r = ControlRange(0, 1000, -100, 400)
-        assertEquals(0.3f, r.right, 0.0001f)
+        assertEquals(0.1f, r.right, 0.0001f)
         assertEquals(1f, r.bottom, 0.0001f)
     }
 }

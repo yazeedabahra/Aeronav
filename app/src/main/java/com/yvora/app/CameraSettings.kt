@@ -15,13 +15,25 @@ internal enum class CameraDetail {
 internal object CameraSettings {
     private fun prefs(context: Context) = context.getSharedPreferences("camera_calibration", Context.MODE_PRIVATE)
 
-    fun readRange(context: Context): ControlRange = prefs(context).let {
-        ControlRange(
-            it.getInt("width", 100).coerceIn(30, 100),
-            it.getInt("height", 100).coerceIn(30, 100),
-            it.getInt("center_x", 50).coerceIn(0, 100),
-            it.getInt("center_y", 50).coerceIn(0, 100)
+    fun readRanges(context:Context):HandRanges {
+        val p=prefs(context)
+        fun read(prefix:String,fallback:ControlRange)=ControlRange(
+            p.getInt(prefix+"width",fallback.widthPercent).coerceIn(10,100),
+            p.getInt(prefix+"height",fallback.heightPercent).coerceIn(10,100),
+            p.getInt(prefix+"center_x",fallback.horizontalCenter).coerceIn(0,100),
+            p.getInt(prefix+"center_y",fallback.verticalCenter).coerceIn(0,100)
         )
+        val shared=read("",ControlRange())
+        return HandRanges(p.getBoolean("ranges_linked",true),shared,read("left_",shared),read("right_",shared))
+    }
+    fun readRange(context:Context):ControlRange=readRanges(context).shared
+    fun saveRanges(context:Context,value:HandRanges) {
+        val e=prefs(context).edit().putBoolean("ranges_linked",value.linked)
+        fun write(prefix:String,r:ControlRange) {
+            e.putInt(prefix+"width",r.widthPercent).putInt(prefix+"height",r.heightPercent)
+                .putInt(prefix+"center_x",r.horizontalCenter).putInt(prefix+"center_y",r.verticalCenter)
+        }
+        write("",value.shared);write("left_",value.left);write("right_",value.right);e.apply()
     }
 
     fun readAssist(context:Context):Boolean = prefs(context).getBoolean("assist_intent",false)
@@ -36,11 +48,8 @@ internal object CameraSettings {
     fun readDetail(context: Context): CameraDetail =
         if (prefs(context).getBoolean("distance", false)) CameraDetail.DISTANCE else CameraDetail.AUTO
 
-    fun saveRange(context: Context, range: ControlRange) {
-        prefs(context).edit().putInt("width", range.widthPercent)
-            .putInt("height", range.heightPercent)
-            .putInt("center_x", range.horizontalCenter)
-            .putInt("center_y", range.verticalCenter).apply()
+    fun saveRange(context:Context,range:ControlRange) {
+        saveRanges(context,readRanges(context).copy(shared=range))
     }
 
     fun saveDetail(context: Context, detail: CameraDetail) {
