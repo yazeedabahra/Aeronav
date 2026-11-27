@@ -12,7 +12,8 @@ internal enum class PracticeStage { OPEN, MOVE, PINCH, RELEASE, DONE }
 internal class TutorialPractice {
     var stage=PracticeStage.OPEN
         private set
-    private var slot=-1
+    var slot=-1
+        private set
     private var last=-1L
     private var openFrames=0
     private var anchorX=0f
@@ -24,7 +25,7 @@ internal class TutorialPractice {
         fun valid(s:PracticeSample?)=s!=null && s.time>=0 && now-s.time in 0L..500L &&
             s.x.isFinite() && s.y.isFinite() && s.pinch.isFinite() && s.quality>=.55f
         val s=if(slot<0){
-            val i=candidates.indexOfFirst{valid(it) && it!!.open && it.pinch>=.34f}
+            val i=candidates.indexOfFirst{it!=null && valid(it) && it.open && it.pinch>=.34f}
             if(i<0){reset();return stage};slot=i;candidates[i]
         }else candidates[slot]
         if(!valid(s)){reset();return stage}

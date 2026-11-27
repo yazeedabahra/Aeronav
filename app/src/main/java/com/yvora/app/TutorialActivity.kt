@@ -22,6 +22,7 @@ class TutorialActivity:LocalizedActivity() {
     private var page=0
     private var ownsPractice=false
     private var practiceRequested=false
+    private var practiceStarted=0L
     private val practice=TutorialPractice()
     private val handler=Handler(Looper.getMainLooper())
     private lateinit var panel:LinearLayout
@@ -179,7 +180,7 @@ class TutorialActivity:LocalizedActivity() {
             practiceStatus?.text=words("Enable camera and overlay in step 2 first.","فعّل الكاميرا والعرض فوق التطبيقات في الخطوة الثانية أولًا.");return
         }
         YvoraAccessibilityService.stopAi()
-        practice.reset();practiceRequested=true
+        practice.reset();practiceRequested=true;practiceStarted=SystemClock.uptimeMillis()
         val running=YvoraService.instance
         if(running!=null){running.setCalibrationMode(true);running.forceHidePointer();return}
         ownsPractice=true
@@ -196,13 +197,14 @@ class TutorialActivity:LocalizedActivity() {
     }
     private fun refreshPractice(){
         if(!practiceRequested)return
+        if(SystemClock.uptimeMillis()-practiceStarted>60000L){stopPractice();practiceStatus?.text=words("Practice timed out. Retry when ready.","انتهت مهلة التدريب. أعد المحاولة عندما تكون جاهزًا.");return}
         val e=YvoraService.instance
         if(e==null){practiceStatus?.text=words("Starting tracking…","جاري تشغيل التتبع…");return}
         if(!e.isCalibrating){e.setCalibrationMode(true);practice.reset()}
         if(e.pauseReason!=null){practice.reset();practiceView?.sample=null;practiceView?.invalidate();practiceStatus?.text=uiStatus(e.pauseReason!!);return}
         val left=e.tutorialSample(0);val right=e.tutorialSample(1)
-        practiceView?.sample=left ?: right;practiceView?.invalidate()
         val stage=practice.observe(left,right,SystemClock.uptimeMillis())
+        practiceView?.sample=when(practice.slot){0->left;1->right;else->left ?: right};practiceView?.invalidate()
         practiceStatus?.text=when(stage){
             PracticeStage.OPEN->words("1/4 Open one palm toward camera.","1/4 افتح كفًا باتجاه الكاميرا.")
             PracticeStage.MOVE->words("2/4 Move the open palm sideways or up/down.","2/4 حرّك الكف المفتوح أفقيًا أو عموديًا.")

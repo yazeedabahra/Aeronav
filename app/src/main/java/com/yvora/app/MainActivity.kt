@@ -19,6 +19,7 @@ import androidx.core.content.ContextCompat
 
 class MainActivity : LocalizedActivity() {
 
+    private var renderedArabic=false
     private lateinit var txtOverlay: TextView
     private lateinit var txtAccessibility: TextView
     private lateinit var txtStatus: TextView
@@ -123,6 +124,7 @@ class MainActivity : LocalizedActivity() {
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
+        renderedArabic=AppLanguage.arabic
         setContentView(R.layout.activity_main)
         findViewById<Button>(R.id.btnLanguage).setOnClickListener {
             androidx.appcompat.app.AlertDialog.Builder(this)
@@ -183,6 +185,7 @@ class MainActivity : LocalizedActivity() {
 
     override fun onResume() {
         super.onResume()
+        if(renderedArabic!=AppLanguage.arabic){recreate();return}
         distanceSwitch.isChecked = CameraSettings.readDetail(this) == CameraDetail.DISTANCE
         updateStatuses()
         YvoraService.statusListener = statusListener
