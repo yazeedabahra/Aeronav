@@ -72,4 +72,6 @@
 <string name="ui_69" formatted="false">Enable both permissions, start the engine, then hold one hand about 50–80 cm from the camera. Keep the room well lit. Use Stop in the notification to end tracking.</string>
 <string name="ui_70" formatted="false">YVORA  /  LOCAL GESTURES + OPTIONAL AI</string>
 <string name="tutorial_open">Getting started / tutorial</string>
+<string name="responsive_cursor">Responsive cursor (restart engine)</string>
+<string name="responsive_cursor_help">Faster tracking while cool, with automatic thermal fallback. May use more battery. Turn off for balanced pacing.</string>
 </resources>

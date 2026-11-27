@@ -72,4 +72,6 @@
 <string name="ui_69" formatted="false">فعّل الإذنين وشغّل المحرك ثم ضع يدك على بعد نحو 50–80 سم من الكاميرا. حافظ على إضاءة جيدة. استخدم إيقاف في الإشعار لإنهاء التتبع.</string>
 <string name="ui_70" formatted="false">YVORA / إيماءات محلية وذكاء اصطناعي اختياري</string>
 <string name="tutorial_open">دليل الاستخدام / التدريب</string>
+<string name="responsive_cursor">مؤشر سريع الاستجابة (أعد تشغيل المحرك)</string>
+<string name="responsive_cursor_help">تتبع أسرع عندما يكون الهاتف باردًا، مع العودة تلقائيًا إلى الحماية الحرارية. قد يزيد استهلاك البطارية. أوقفه للأداء المتوازن.</string>
 </resources>

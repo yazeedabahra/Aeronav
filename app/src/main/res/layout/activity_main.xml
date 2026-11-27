@@ -5,6 +5,8 @@
 <TextView android:layout_width="match_parent" android:layout_height="wrap_content" android:text="@string/ui_2" android:textSize="10sp" android:textColor="@color/accent" android:layout_marginTop="12dp" android:letterSpacing="0.07" />
 <Button android:id="@+id/btnLanguage" android:layout_width="match_parent" android:layout_height="wrap_content" android:text="العربية / English" android:textAllCaps="false" android:layout_marginTop="8dp" />
 <Button android:id="@+id/btnTutorial" android:layout_width="match_parent" android:layout_height="wrap_content" android:text="@string/tutorial_open" android:textAllCaps="false" android:layout_marginTop="8dp" />
+<Switch android:id="@+id/switchResponsiveCursor" android:layout_width="match_parent" android:layout_height="wrap_content" android:text="@string/responsive_cursor" android:textColor="@color/text_primary" android:layout_marginTop="12dp" />
+<TextView android:layout_width="match_parent" android:layout_height="wrap_content" android:text="@string/responsive_cursor_help" android:textColor="@color/text_secondary" android:textSize="13sp" />
 <Switch android:id="@+id/switchDualHand" android:layout_width="match_parent" android:layout_height="wrap_content" android:text="@string/ui_3" android:textColor="@color/text_primary" android:layout_marginTop="12dp" />
 <Switch android:id="@+id/switchAssistIntent" android:layout_width="match_parent" android:layout_height="wrap_content" android:text="@string/ui_4" android:textColor="@color/text_primary" android:layout_marginTop="8dp" />
 <TextView android:layout_width="match_parent" android:layout_height="wrap_content" android:text="@string/ui_5" android:textColor="@color/text_secondary" />

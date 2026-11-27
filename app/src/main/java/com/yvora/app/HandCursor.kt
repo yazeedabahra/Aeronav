@@ -101,7 +101,7 @@ internal class HandCursor(val slot:Int) {
         applyPosition(px,py)
     }
     /** Only the normal open-palm cursor is interpolated. Input anchors use rendered x/y. */
-    fun movePointer(nx:Float,ny:Float,width:Int,height:Int,lowPower:Boolean) {
+    fun movePointer(nx:Float,ny:Float,width:Int,height:Int,lowPower:Boolean,responsive:Boolean=false) {
         val (px,py)=target(nx,ny,width,height) ?: return
         val now=SystemClock.uptimeMillis()
         val gap=if(lastTargetAt<0) 90L else now-lastTargetAt
@@ -110,7 +110,7 @@ internal class HandCursor(val slot:Int) {
         if(!initialized || view?.visibility!=View.VISIBLE || gap>350L){
             glide.cancel();applyPosition(px,py);return
         }
-        if(!glide.aim(x,y,px,py,now,gap)){
+        if(!glide.aim(x,y,px,py,now,gap,responsive)){
             // Tiny movements must accumulate instead of restarting a pointless animation.
             if(renderPosted){Choreographer.getInstance().removeFrameCallback(renderCallback);renderPosted=false}
             return

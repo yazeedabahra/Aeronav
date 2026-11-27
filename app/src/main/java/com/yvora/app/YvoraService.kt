@@ -110,7 +110,8 @@ class YvoraService : LifecycleService() {
                     else -> "Severe or higher"
                 }
             } else "Thermal status unavailable"
-            return (pauseReason ?: "Thermal: $level • Analysis target ${1000 / analysisIntervalMs} /s • Camera $captureRateLabel") + battery
+            return (pauseReason ?: "Thermal: $level • Analysis target ${1000 / analysisIntervalMs} /s • Camera $captureRateLabel") + battery +
+                if(boostInference) localized(" • Responsive"," • استجابة سريعة") else localized(" • Balanced pacing"," • معالجة متوازنة")
         }
 
     private val powerReceiver = object : BroadcastReceiver() {
@@ -141,6 +142,8 @@ class YvoraService : LifecycleService() {
     private val resultPending = AtomicBoolean(false)
     private lateinit var framePacer: FramePacer
     private var lowRamDevice = false
+    private var responsiveMode=true
+    @Volatile private var boostInference=false
     private var cameraDetail = CameraDetail.AUTO
     private var calibrationMode = false
     val isCalibrating: Boolean get() = calibrationMode
@@ -312,6 +315,7 @@ class YvoraService : LifecycleService() {
         val activityManager = getSystemService(ACTIVITY_SERVICE) as ActivityManager
         lowRamDevice = activityManager.isLowRamDevice || activityManager.memoryClass <= 128
         cameraDetail = CameraSettings.readDetail(this)
+        responsiveMode=CameraSettings.readResponsive(this)
         dualHandMode = CameraSettings.readDualHand(this)
         val requestedMode=CameraSettings.readDualMode(this)
         dualMode=if(!dualHandMode && requestedMode in listOf(DualMode.ZOOM,DualMode.ROTATE)) DualMode.NORMAL else requestedMode
@@ -324,7 +328,7 @@ class YvoraService : LifecycleService() {
             cursor.recognizer.configureAssist(CameraSettings.readAssist(this), CameraSettings.readAssistLevel(this))
         }
         framePacer = FramePacer(if (lowRamDevice) 100L else 66L)
-        thermalPolicy = ThermalPolicy(lowRamDevice)
+        thermalPolicy = ThermalPolicy(lowRamDevice,responsiveMode)
         powerManager = getSystemService(POWER_SERVICE) as PowerManager
 
         val metrics = resources.displayMetrics
@@ -483,6 +487,7 @@ class YvoraService : LifecycleService() {
         batteryTenths = battery?.getIntExtra(BatteryManager.EXTRA_TEMPERATURE, Int.MIN_VALUE)
             ?.takeIf { it in 0..1000 }
         thermalPolicy.environment(now, thermalLevel, batteryTenths, powerManager.isPowerSaveMode)
+        boostInference=thermalPolicy.boostAllowed
         analysisIntervalMs = thermalPolicy.interval(now)
         val reason = when {
             !powerManager.isInteractive -> "Screen off • Camera paused"
@@ -540,8 +545,9 @@ class YvoraService : LifecycleService() {
                     Camera2CameraInfo.from(it).getCameraCharacteristic(
                         CameraCharacteristics.CONTROL_AE_AVAILABLE_TARGET_FPS_RANGES)
                 }
-                val range = ranges?.filter { it.lower >= 8 && it.upper in 12..20 }
-                    ?.minWithOrNull(compareBy<android.util.Range<Int>> { it.upper }.thenByDescending { it.lower })
+                val eligible=ranges?.filter { it.lower >= 8 && it.upper in 12..20 }
+                val range=if(responsiveMode) eligible?.maxWithOrNull(compareBy<android.util.Range<Int>> { it.upper }.thenBy { it.lower })
+                    else eligible?.minWithOrNull(compareBy<android.util.Range<Int>> { it.upper }.thenByDescending { it.lower })
                 if (range != null) {
                     Camera2Interop.Extender(builder).setCaptureRequestOption(
                         CaptureRequest.CONTROL_AE_TARGET_FPS_RANGE, range)
@@ -600,7 +606,7 @@ class YvoraService : LifecycleService() {
         val frameTime = SystemClock.uptimeMillis()
         val detector = handLandmarker
         // Drop before doing expensive conversion. Only one UI result can be pending.
-        if (stopped || !cameraRunning || epoch != cameraEpoch || detector == null || resultPending.get() || !framePacer.canStart(frameTime, analysisIntervalMs)) {
+        if (stopped || !cameraRunning || epoch != cameraEpoch || detector == null || resultPending.get() || !framePacer.canStart(frameTime, analysisIntervalMs,boostInference)) {
             imageProxy.close()
             return
         }
@@ -674,6 +680,7 @@ class YvoraService : LifecycleService() {
         identityDegrees=identification.degrees;identityAmbiguous=identification.ambiguous
         predictionDegrees.fill(0f);conflictStatus="None"
         val states=cursors.mapIndexed { slot,cursor ->
+            cursor.recognizer.setResponsivePointer(boostInference)
             cursor.recognizer.processResult(result,width,height,handIndex=assignment[slot],frameAgeMs=frameAgeMs)
         }
         fuzzyTraces=Array(2){ cursors[it].recognizer.fuzzyTrace }
@@ -836,7 +843,8 @@ class YvoraService : LifecycleService() {
                 val prediction=cursor.predictor.update(state.pointerX,state.pointerY,now,frameAgeMs,
                     FuzzyCore.and(fuzzyTraces[i].quality,identityDegrees[i]))
                 predictionDegrees[i]=prediction.degree
-                cursor.movePointer(prediction.x,prediction.y,screenWidth,screenHeight,thermalPolicy.warm || lowRamDevice)
+                cursor.movePointer(prediction.x,prediction.y,screenWidth,screenHeight,
+                    thermalPolicy.warm || (lowRamDevice && (!boostInference || dualHandMode)),boostInference)
                 cursor.color()
             } else {
                 // Stop display interpolation before calculating any tap/drag anchor.

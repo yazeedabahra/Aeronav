@@ -13,13 +13,14 @@ internal class CursorGlide {
     var active=false
         private set
     data class Position(val x:Float,val y:Float,val done:Boolean)
-    fun aim(fromX:Float,fromY:Float,toX:Float,toY:Float,now:Long,sampleGap:Long):Boolean {
+    fun aim(fromX:Float,fromY:Float,toX:Float,toY:Float,now:Long,sampleGap:Long,responsive:Boolean=false):Boolean {
         if(!fromX.isFinite() || !fromY.isFinite() || !toX.isFinite() || !toY.isFinite()){
             cancel();return false
         }
         startX=fromX;startY=fromY;targetX=toX;targetY=toY;startTime=now
         // Reach the newest observed position quickly, with no long animation backlog.
-        duration=(sampleGap.coerceIn(40L,250L)*.65f).toLong().coerceIn(32L,95L)
+        duration=if(responsive) (sampleGap.coerceIn(30L,200L)*.85f).toLong().coerceIn(24L,85L)
+            else (sampleGap.coerceIn(40L,250L)*.65f).toLong().coerceIn(32L,95L)
         active=kotlin.math.abs(toX-fromX)>=.5f || kotlin.math.abs(toY-fromY)>=.5f
         return active
     }

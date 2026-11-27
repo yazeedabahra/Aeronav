@@ -137,6 +137,13 @@ class MainActivity : LocalizedActivity() {
         bindViews()
         setupButtons()
         setupCalibration()
+        findViewById<Switch>(R.id.switchResponsiveCursor).apply {
+            isChecked=CameraSettings.readResponsive(this@MainActivity)
+            setOnCheckedChangeListener { _,enabled->
+                CameraSettings.saveResponsive(this@MainActivity,enabled)
+                toast(localized("Restart engine to apply cursor performance mode.","أعد تشغيل المحرك لتطبيق وضع أداء المؤشر."))
+            }
+        }
         findViewById<Switch>(R.id.switchDualHand).apply {
             isChecked=CameraSettings.readDualHand(this@MainActivity)
             setOnCheckedChangeListener { _, enabled -> CameraSettings.saveDualHand(this@MainActivity,enabled) }

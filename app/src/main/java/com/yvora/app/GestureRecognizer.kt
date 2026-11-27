@@ -89,6 +89,7 @@ class GestureRecognizer {
 
     // Pointer smoothing
     private val pointerFilter = AdaptivePointerFilter()
+    internal fun setResponsivePointer(enabled:Boolean){pointerFilter.responsive=enabled}
     private val horizontalSwipe = HorizontalSwipeEngine()
     private var controlRange = ControlRange()
 
