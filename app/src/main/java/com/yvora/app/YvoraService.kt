@@ -923,7 +923,11 @@ class YvoraService : LifecycleService() {
             val direction=state.triggeredGesture
             if(direction!=null && touchArbiter.owner==null && !YvoraAccessibilityService.dragBusy() && touchArbiter.claim(i,now)) {
                 if(direction=="LEFT" || direction=="RIGHT") DiagnosticCounters.swipe()
-                val ok=YvoraAccessibilityService.performScroll(direction.lowercase())
+                val horizontal=direction=="LEFT" || direction=="RIGHT"
+                val ok=if(horizontal) YvoraAccessibilityService.performObservedScroll(direction.lowercase()) { completed ->
+                    gestureDispatch=if(completed) "$direction stroke completed" else "$direction stroke cancelled by Android"
+                    if(!completed) DiagnosticCounters.rejected()
+                } else YvoraAccessibilityService.performScroll(direction.lowercase())
                 gestureDispatch=if(ok) "$direction dispatched" else "$direction rejected"
                 if(!ok) DiagnosticCounters.rejected()
                 touchArbiter.release(i,now)

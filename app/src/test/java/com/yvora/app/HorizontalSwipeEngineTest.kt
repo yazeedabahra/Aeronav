@@ -4,6 +4,28 @@ import org.junit.Assert.*
 import org.junit.Test
 
 class HorizontalSwipeEngineTest {
+    @Test fun firstKnifeCandidateAnchorsButCannotExecuteUntilConfirmed() {
+        val e=HorizontalSwipeEngine()
+        assertNull(e.updatePose(false,.35f,.5f,0,candidate=true))
+        assertNull(e.updatePose(false,.42f,.5f,100,candidate=true))
+        assertEquals("RIGHT",e.updatePose(true,.46f,.5f,200))
+        assertNull(e.updatePose(true,.65f,.5f,300))
+        assertTrue(e.waitingForRelease)
+        e.updatePose(false,.65f,.5f,400)
+        e.updatePose(false,.65f,.5f,500)
+        assertFalse(e.waitingForRelease)
+        assertNull(e.updatePose(false,.65f,.5f,600,candidate=true))
+        assertEquals("LEFT",e.updatePose(true,.52f,.5f,750))
+    }
+    @Test fun unconfirmedCandidateNeverExecutesAndReleaseClearsAnchor() {
+        val e=HorizontalSwipeEngine()
+        e.updatePose(false,.2f,.5f,0,candidate=true)
+        assertNull(e.updatePose(false,.6f,.5f,100,candidate=true))
+        e.updatePose(false,.6f,.5f,200)
+        e.updatePose(false,.6f,.5f,300)
+        assertNull(e.updatePose(true,.6f,.5f,400))
+        assertNull(e.updatePose(true,.61f,.5f,500))
+    }
     @Test fun stationaryAndVerticalMotionDoNotSwipe() {
         val e = HorizontalSwipeEngine()
         assertNull(e.update(3, .5f, .5f, 0))

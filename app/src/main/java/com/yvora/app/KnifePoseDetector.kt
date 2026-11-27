@@ -17,6 +17,8 @@ internal class KnifePoseDetector {
         private set
     var edgeScore = 0f
         private set
+    var depthPinchRatio=Float.NaN
+        private set
     fun set(i: Int, x: Float, y: Float, z: Float) {
         points[3*i]=x; points[3*i+1]=y; points[3*i+2]=z
     }
@@ -42,6 +44,7 @@ internal class KnifePoseDetector {
             return false
         }
         edgeScore=(1f-abs(nz)/norm).coerceIn(0f,1f)
+        depthPinchRatio=dist(4,8)/maxOf(len,width)
         var extended=0
         var equivalent=0f
         for (base in 5..17 step 4) {
@@ -55,7 +58,9 @@ internal class KnifePoseDetector {
         features=PoseFeatures(FuzzyCore.rise(edgeScore,.24f,.80f),
             FuzzyCore.rise(equivalent,1.35f,3.15f),FuzzyCore.fall(together/width,1.15f,2f))
         relaxedScore=FuzzyPose.score(edgeScore,equivalent,together/width)
-        val valid=extended>=3 && together <= width*1.40f && edgeScore >= (if (armed) 0.43f else 0.63f)
+        // Allow a comfortable oblique knife hand rather than requiring an almost perfect edge.
+        // Three extended fingers and bounded spread remain necessary.
+        val valid=extended>=3 && together <= width*1.65f && edgeScore >= (if (armed) 0.32f else 0.46f)
         candidate = valid
         if (valid) {
             exitCount=0
@@ -66,5 +71,5 @@ internal class KnifePoseDetector {
         }
         return armed
     }
-    fun reset() { armed=false; enterCount=0; exitCount=0; edgeScore=0f; candidate=false; relaxedScore=0f;features=null }
+    fun reset() { armed=false; enterCount=0; exitCount=0; edgeScore=0f; candidate=false; relaxedScore=0f;features=null;depthPinchRatio=Float.NaN }
 }

@@ -16,6 +16,23 @@ class KnifePoseDetectorTest {
             pt(base+3,x,if(curled) .2f else -.9f)
         }
     }
+    @Test fun obliqueKnifeCanArmButFaceCannot() {
+        val d=KnifePoseDetector()
+        fun pose(angle:Double) {
+            fun point(i:Int,x:Float,y:Float) {
+                d.set(i,(x*kotlin.math.cos(angle)).toFloat(),y,(-x*kotlin.math.sin(angle)).toFloat())
+            }
+            point(0,0f,1f)
+            for(f in 1..4){
+                val base=f*4+1;val x=(f-2.5f)*.3f
+                point(base,x,0f);point(base+1,x,-.3f);point(base+2,x,-.6f);point(base+3,x,-.9f)
+            }
+        }
+        val angle=60.0*Math.PI/180.0
+        pose(angle);assertFalse(d.update());assertTrue(d.candidate)
+        pose(angle);assertTrue(d.update())
+        pose(0.0);d.update();pose(0.0);assertFalse(d.update())
+    }
     @Test fun openPalmAndFistDoNotArm() {
         val d=KnifePoseDetector()
         repeat(4) { hand(d,false); assertFalse(d.update()) }

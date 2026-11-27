@@ -192,16 +192,23 @@ class GestureRecognizer {
         // A close pinch and the normal face-on pointer are not treated as assisted swipes.
         val labelScore=result.handednesses().getOrNull(handIndex)?.firstOrNull()?.score() ?: 0f
         val quality=FuzzyControllers.quality(labelScore,frameAgeMs)
-        val pinchClear=!ownedBefore && tapDist>=.34f
+        // Edge-on fingers can overlap in the camera projection without touching.
+        // Only use world depth to disambiguate a credible knife pose; ordinary pinch/drag stays unchanged.
+        val depthClear=world?.size==21 && knifePose.depthPinchRatio.isFinite() && knifePose.depthPinchRatio>=.34f
+        val knifeCandidate=(knifePose.candidate || edgePose) && !ownedBefore &&
+            (tapDist>=.27f || depthClear)
+        val pinchClear=!ownedBefore && (tapDist>=.34f || (knifeCandidate && depthClear))
         val standardScore=FuzzyControllers.assistedScore(knifePose.relaxedScore,quality,pinchClear)
         val personalScore=PersonalGesture.degree(knifePose.features,personalTemplate,quality,pinchClear)
         val assistedScore=FuzzyCore.or(standardScore,personalScore)
         val relaxed=fuzzyIntent.update(assistEnabled,assistedScore,assistThreshold,pinchClear)
-        val swipePose = (edgePose || relaxed) && !ownedBefore
-        // The same temporal motion gate and one-shot latch still apply.
-        val swipe = if (ownedBefore) null else horizontalSwipe.updatePose(swipePose, rawPX, rawPY, now,
-            geometry.palmSize() / w, h / w)
-        val blocksOther = !ownedBefore && (knifePose.candidate || swipePose || horizontalSwipe.blocksOtherGestures)
+        val swipePose = ((edgePose && knifeCandidate) || relaxed) && !ownedBefore
+        // Capture the first credible pose sample, but dispatch only after confirmation.
+        // A real pinch retains ownership; a projected overlap in a knife pose cannot start a tap.
+        val swipe = if (ownedBefore) { horizontalSwipe.trackingLost();null }
+            else horizontalSwipe.updatePose(swipePose,rawPX,rawPY,now,geometry.palmSize()/w,h/w,
+                candidate=knifeCandidate || swipePose)
+        val blocksOther = !ownedBefore && (knifeCandidate || swipePose || horizontalSwipe.blocksOtherGestures)
         val action = pinchDrag.update(tapDist, now, !blocksOther, supportsDrag)
         val pinchOwnsFrame = ownedBefore || pinchDrag.ownsPinch || action != PinchAction.NONE
         val tapPinching = pinchDrag.ownsPinch
@@ -301,7 +308,7 @@ class GestureRecognizer {
         }
 
         val debugInfo = "$displayHand hand | Fingers: $fingerStr ($totalUp) | " +
-                "${if (swipePose) "Knife hand: swipe ready" else if (gestureArmed) "Armed: $gestureDirection" else "Idle"} | Assist: ${if(assistEnabled) (knifePose.relaxedScore*100).toInt().toString()+"%" else "Off"} | Edge: ${(knifePose.edgeScore * 100).toInt()}% | Pinch: ${(tapDist * 100).toInt()}%"
+                "${if(horizontalSwipe.waitingForRelease) "Swipe: open palm to re-arm" else if(swipePose) "Knife hand: swipe ready" else if(knifeCandidate) "Knife hand: confirming" else if (gestureArmed) "Armed: $gestureDirection" else "Idle"} | Motion: ${(horizontalSwipe.lastMembership*100).toInt()}% | Assist: ${if(assistEnabled) (knifePose.relaxedScore*100).toInt().toString()+"%" else "Off"} | Edge: ${(knifePose.edgeScore * 100).toInt()}% | Pinch: ${(tapDist * 100).toInt()}%"
 
         fuzzyTrace=FuzzyHandTrace(true,labelScore,quality,knifePose.relaxedScore,assistedScore,
             horizontalSwipe.lastMembership,pointerFilter.tauSeconds,assistThreshold,assistEnabled,
