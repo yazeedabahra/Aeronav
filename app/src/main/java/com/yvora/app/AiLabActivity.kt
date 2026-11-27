@@ -43,7 +43,7 @@ class AiLabActivity : LocalizedActivity() {
         val protect=AiCapturePolicy.protect(foreground,keyField.text.isNotEmpty(),keyField.hasFocus())
         if(protect) window.addFlags(WindowManager.LayoutParams.FLAG_SECURE)
         else window.clearFlags(WindowManager.LayoutParams.FLAG_SECURE)
-        if(::privacyStatus.isInitialized) privacyStatus.text=if(protect) localized("Capture protected • API key entry","التصوير محمي • إدخال مفتاح API")
+        if(::privacyStatus.isInitialized) privacyStatus.text=if(protect) localized("Capture protected • clear key and leave field to capture","التصوير محمي • امسح المفتاح واخرج من الحقل للتصوير")
             else localized("Screenshots allowed • key field empty","التصوير مسموح • حقل المفتاح فارغ")
     }
     override fun onCreate(savedInstanceState:Bundle?) {
@@ -108,6 +108,7 @@ class AiLabActivity : LocalizedActivity() {
                 if(Build.VERSION.SDK_INT>=26)importantForAutofill=View.IMPORTANT_FOR_AUTOFILL_NO_EXCLUDE_DESCENDANTS
             }
             if(multi){minLines=3;maxLines=6;gravity=Gravity.TOP or Gravity.START}else setSingleLine(true)
+            if(secret) transformationMethod=android.text.method.PasswordTransformationMethod.getInstance()
             parent.addView(this,LinearLayout.LayoutParams(-1,-2).apply{bottomMargin=dp(12)})
         }
         val header=LinearLayout(this).apply{
@@ -165,7 +166,7 @@ class AiLabActivity : LocalizedActivity() {
         })
         reveal.setOnClickListener{showConnection(cloudBody.visibility!=View.VISIBLE)}
         submit=action(cloudBody,localized("Ask selected AI provider","اسأل المزود المحدد"),true)
-        val clear=action(cloudBody,localized("Clear key and cancel preview","مسح المفتاح وإلغاء المعاينة"))
+        val clear=action(cloud,localized("Clear key and cancel preview","مسح المفتاح وإلغاء المعاينة"))
         val review=card()
         section(review,"03  /  REVIEW",localized("Plan & response","الخطة والاستجابة"),localized("Nothing runs until you approve the plan and press Run here on your target screen.","لا يُنفّذ شيء حتى تعتمد الخطة وتضغط تنفيذ هنا على الشاشة المستهدفة."))
         result=line(review,localized("Ready. Enter a command or review diagnostics.","جاهز. أدخل أمرًا أو راجع التشخيص."),15f)
@@ -191,6 +192,13 @@ class AiLabActivity : LocalizedActivity() {
         setContentView(scroll)
         panel.requestFocus()
         ViewCompat.requestApplyInsets(scroll)
+        result.addTextChangedListener(object:TextWatcher{
+            override fun beforeTextChanged(s:CharSequence?,start:Int,count:Int,after:Int){}
+            override fun onTextChanged(s:CharSequence?,start:Int,before:Int,count:Int){
+                if(foreground) scroll.post { if(!isDestroyed && foreground) scroll.smoothScrollTo(0,review.top) }
+            }
+            override fun afterTextChanged(s:Editable?){}
+        })
         syncScreenshotProtection()
         clear.setOnClickListener {
             generation++
