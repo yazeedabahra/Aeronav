@@ -4,7 +4,7 @@ import kotlin.math.abs
 
 /** Normalized pose memberships, never raw landmarks or camera frames. */
 internal data class PoseFeatures(val edge:Float,val extension:Float,val together:Float) {
-    fun valid()=listOf(edge,extension,together).all { it.isFinite() && it in 0f..1f }
+    fun valid()=edge.isFinite() && extension.isFinite() && together.isFinite() && edge in 0f..1f && extension in 0f..1f && together in 0f..1f
     fun eligible()=valid() && edge>=.40f && extension>=.45f && together>=.45f
     /** Fuzzy Jaccard similarity: sum of intersections / sum of unions. */
     fun similarity(other:PoseFeatures):Float {

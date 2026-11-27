@@ -165,7 +165,7 @@ class YvoraService : LifecycleService() {
     internal fun zoomTrace()=zoomMessage
     private var poseTraining:PoseTraining?=null
     internal fun beginPoseTraining(slot:Int):Boolean {
-        if(slot !in 0..1 || !cameraRunning || !calibrationMode || YvoraAccessibilityService.aiActive()) return false
+        if(slot !in 0..1 || !cameraRunning || !calibrationMode || YvoraAccessibilityService.aiActive() || YvoraAccessibilityService.zoomBusy()) return false
         poseTraining=PoseTraining(slot,SystemClock.uptimeMillis())
         return true
     }
