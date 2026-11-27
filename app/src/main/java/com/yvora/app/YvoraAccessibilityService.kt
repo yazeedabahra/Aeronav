@@ -18,6 +18,15 @@ class YvoraAccessibilityService : AccessibilityService() {
             return instance?.doScroll(direction) ?: false
         }
 
+        internal fun performObservedScroll(direction:String,completed:(Boolean)->Unit):Boolean {
+            val service=instance ?: return false
+            if(aiActive() || zoomBusy() || dragBusy() || direction !in listOf("left","right")) return false
+            val power=service.getSystemService(android.content.Context.POWER_SERVICE) as android.os.PowerManager
+            val lock=service.getSystemService(android.content.Context.KEYGUARD_SERVICE) as android.app.KeyguardManager
+            if(!power.isInteractive || lock.isKeyguardLocked || lock.isDeviceLocked) return false
+            return try { service.doScroll(direction,completed) } catch(_:RuntimeException){false}
+        }
+
         internal fun performCustomScroll(direction:String):Boolean {
             val service=instance ?: return false
             if(aiActive() || zoomBusy() || dragBusy() || direction !in listOf("left","right","up","down")) return false

@@ -3,7 +3,7 @@ package com.yvora.app
 import kotlin.math.abs
 
 /** Android thermal severity is an ordinal (0 none, 1 light, 2 moderate, 3 severe...). */
-internal class ThermalPolicy(private val lowRam: Boolean) {
+internal class ThermalPolicy(private val lowRam: Boolean, private val responsive:Boolean=false) {
     var cooling = false
         private set
     var warm = false
@@ -53,12 +53,16 @@ internal class ThermalPolicy(private val lowRam: Boolean) {
         lastFingers = fingers
     }
 
+    // The faster inference budget is only available when cool and outside power saver.
+    val boostAllowed:Boolean get()=responsive && !warm && !cooling && fuzzyHeat<.50f
     fun interval(now: Long): Long {
         val active=lastActivity>=0L && now-lastActivity<=700L
         val base=when {
             !hand -> if(warm) 320L else 250L
             warm && active -> 150L
             warm -> 220L
+            boostAllowed && active -> if(lowRam) 65L else 48L
+            boostAllowed -> if(lowRam) 100L else 85L
             active -> if(lowRam) 110L else 90L
             else -> 160L
         }

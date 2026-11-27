@@ -5,6 +5,9 @@ import android.graphics.Color
 import android.graphics.PixelFormat
 import android.graphics.drawable.GradientDrawable
 import android.os.Build
+import android.os.SystemClock
+import android.view.Choreographer
+import kotlin.math.roundToInt
 import android.view.Gravity
 import android.view.LayoutInflater
 import android.view.View
@@ -32,6 +35,32 @@ internal class HandCursor(val slot:Int) {
     var startY=0f
     var dragging=false
     private var lastColor:Int?=null
+    private val glide=CursorGlide()
+    private var lastTargetAt=-1L
+    private var lastRenderAt=-1L
+    private var renderGapMs=16L
+    private var renderPosted=false
+    private val renderCallback=object:Choreographer.FrameCallback {
+        override fun doFrame(frameTimeNanos:Long) {
+            renderPosted=false
+            if(view?.visibility!=View.VISIBLE || !glide.active){glide.cancel();return}
+            val now=SystemClock.uptimeMillis()
+            if(lastRenderAt<0 || now-lastRenderAt>=renderGapMs-2L) {
+                glide.sample(now)?.let { pos->
+                    applyPosition(pos.x,pos.y)
+                    lastRenderAt=now
+                }
+            }
+            scheduleRender()
+        }
+    }
+    private fun scheduleRender(){
+        if(glide.active && !renderPosted){renderPosted=true;Choreographer.getInstance().postFrameCallback(renderCallback)}
+    }
+    fun freezeMotion(){
+        glide.cancel();lastTargetAt=-1L;lastRenderAt=-1L
+        if(renderPosted){Choreographer.getInstance().removeFrameCallback(renderCallback);renderPosted=false}
+    }
 
     fun attach(context:Context,manager:WindowManager) {
         half=24f*context.resources.displayMetrics.density
@@ -54,8 +83,8 @@ internal class HandCursor(val slot:Int) {
             color()
         } catch(_:RuntimeException) { }
     }
-    fun position(nx:Float,ny:Float,width:Int,height:Int) {
-        if(!nx.isFinite() || !ny.isFinite()) return
+    private fun target(nx:Float,ny:Float,width:Int,height:Int):Pair<Float,Float>? {
+        if(!nx.isFinite() || !ny.isFinite()) return null
         val maxX=(width-1).coerceAtLeast(0).toFloat()
         val maxY=(height-1).coerceAtLeast(0).toFloat()
         fun snap(value:Float,max:Float):Float=when {
@@ -63,22 +92,43 @@ internal class HandCursor(val slot:Int) {
             value>=max-3f -> max
             else -> value
         }
-        val px=snap(nx.coerceIn(0f,1f)*maxX,maxX)
-        val py=snap(ny.coerceIn(0f,1f)*maxY,maxY)
-        val edgeChanged=(px!=x && (px==0f || px==maxX)) || (py!=y && (py==0f || py==maxY))
-        if(!initialized || edgeChanged || kotlin.math.abs(px-x)>3f || kotlin.math.abs(py-y)>3f) {
-            x=px;y=py;initialized=true
+        return snap(nx.coerceIn(0f,1f)*maxX,maxX) to snap(ny.coerceIn(0f,1f)*maxY,maxY)
+    }
+    /** Immediate position for re-arm, active drag and special modes. */
+    fun position(nx:Float,ny:Float,width:Int,height:Int) {
+        freezeMotion()
+        val (px,py)=target(nx,ny,width,height) ?: return
+        applyPosition(px,py)
+    }
+    /** Only the normal open-palm cursor is interpolated. Input anchors use rendered x/y. */
+    fun movePointer(nx:Float,ny:Float,width:Int,height:Int,lowPower:Boolean,responsive:Boolean=false) {
+        val (px,py)=target(nx,ny,width,height) ?: return
+        val now=SystemClock.uptimeMillis()
+        val gap=if(lastTargetAt<0) 90L else now-lastTargetAt
+        lastTargetAt=now
+        renderGapMs=if(lowPower) 33L else 16L
+        if(!initialized || view?.visibility!=View.VISIBLE || gap>350L){
+            glide.cancel();applyPosition(px,py);return
         }
+        if(!glide.aim(x,y,px,py,now,gap,responsive)){
+            // Tiny movements must accumulate instead of restarting a pointless animation.
+            if(renderPosted){Choreographer.getInstance().removeFrameCallback(renderCallback);renderPosted=false}
+            return
+        }
+        scheduleRender()
+    }
+    private fun applyPosition(px:Float,py:Float){
+        x=px.roundToInt().toFloat();y=py.roundToInt().toFloat();initialized=true
         val p=params ?: return
         val v=view ?: return
-        val left=(x-half).toInt(); val top=(y-half).toInt()
-        if(p.x!=left || p.y!=top) {
+        val left=(x-half).roundToInt();val top=(y-half).roundToInt()
+        if(p.x!=left || p.y!=top){
             p.x=left;p.y=top
-            try { wm?.updateViewLayout(v,p) } catch(_:RuntimeException) { }
+            try{wm?.updateViewLayout(v,p)}catch(_:RuntimeException){}
         }
     }
     fun show() { if(initialized) view?.visibility=View.VISIBLE }
-    fun hide() { view?.visibility=View.GONE }
+    fun hide() { freezeMotion();view?.visibility=View.GONE }
     fun color(value:Int=baseColor) {
         if(lastColor==value) return
         view?.findViewById<View>(R.id.innerDot)?.background=GradientDrawable().apply {
@@ -93,6 +143,7 @@ internal class HandCursor(val slot:Int) {
         recognizer.reset();predictor.reset();initialized=false;armed=false;dragging=false;hide();color()
     }
     fun remove() {
+        freezeMotion()
         view?.let { try { wm?.removeView(it) } catch(_:RuntimeException) {} }
         view=null;params=null;wm=null
     }

@@ -36,6 +36,11 @@ abstract class LocalizedActivity:AppCompatActivity() {
 
 // Presentation-only status localization; protocol tokens and state comparisons remain English.
 private val statusTranslations=linkedMapOf(
+"Swipe: open palm to re-arm" to "السحب: افتح الكف لإعادة التهيئة",
+"Knife hand: confirming" to "حافة الكف: جاري التأكيد",
+"Motion: " to "الحركة: ",
+" stroke completed" to " اكتملت الإيماءة",
+" stroke cancelled by Android" to " ألغى Android الإيماءة",
 "AI owns input; use Stop AI or a manual pinch to interrupt" to "الذكاء الاصطناعي يتحكم؛ اضغط إيقاف أو اقرص الأصابع للمقاطعة",
 "Transform rejected (busy or accessibility unavailable)" to "رُفض التحويل (اللمس مشغول أو إمكانية الوصول غير متاحة)",
 "Zoom gesture accepted; open palms to repeat" to "قُبل التكبير؛ افتح الكفين للتكرار",

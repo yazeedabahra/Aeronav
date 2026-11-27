@@ -18,6 +18,7 @@ internal class HorizontalSwipeEngine {
         private set
     var blocksOtherGestures = false
         private set
+    val waitingForRelease: Boolean get() = latched
 
     fun reset() {
         lastMembership=0f
@@ -43,12 +44,12 @@ internal class HorizontalSwipeEngine {
     fun update(fingers: Int, x: Float, y: Float, nowMs: Long, palmWidth: Float = 0.20f, aspect: Float = 1f): String? =
         updatePose(fingers == 3, x, y, nowMs, palmWidth, aspect)
 
-    fun updatePose(armed: Boolean, x: Float, y: Float, nowMs: Long, palmWidth: Float = 0.20f, aspect: Float = 1f): String? {
+    fun updatePose(armed: Boolean, x: Float, y: Float, nowMs: Long, palmWidth: Float = 0.20f, aspect: Float = 1f, candidate: Boolean = armed): String? {
         if (!x.isFinite() || !y.isFinite()) {
             trackingLost()
             return null
         }
-        if (!armed) {
+        if (!armed && !candidate) {
             lastMembership=0f
             if (blocksOtherGestures) {
                 releaseSamples++
@@ -76,7 +77,8 @@ internal class HorizontalSwipeEngine {
         }
         lastSampleTime = nowMs
         val elapsed = nowMs - anchorTime
-        if (elapsed < 55L) return null
+        // A first candidate can establish the anchor but cannot trigger a swipe.
+        if (!armed || elapsed < 55L) return null
 
         val dx = x - anchorX
         val dy = (y - anchorY) * aspect.coerceIn(0.4f, 2.5f)

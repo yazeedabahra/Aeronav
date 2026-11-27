@@ -12,8 +12,9 @@ internal class FramePacer(private val minimumIntervalMs: Long) {
     fun canStart(nowMs: Long): Boolean = lastStart < 0L || nowMs - lastStart >= intervalMs
 
     // Keep a processing rest period even when results are arriving quickly.
-    fun canStart(nowMs: Long, requestedMs: Long): Boolean {
-        val interval = maxOf(requestedMs, (averageCostMs * 2.0).toLong().coerceAtMost(320L))
+    fun canStart(nowMs: Long, requestedMs: Long, responsive:Boolean=false): Boolean {
+        val restFactor=if(responsive) 1.35 else 2.0
+        val interval = maxOf(requestedMs, (averageCostMs * restFactor).toLong().coerceAtMost(320L))
         return lastStart < 0L || nowMs - lastStart >= interval
     }
 
@@ -34,6 +35,7 @@ internal class AdaptivePointerFilter {
     private var rawX = 0.5f
     private var rawY = 0.5f
     private var previousTime = -1L
+    var responsive=false
     var tauSeconds=.095f
         private set
 
@@ -50,9 +52,12 @@ internal class AdaptivePointerFilter {
         val dt = ((timeMs - previousTime).coerceIn(1L, 250L)) / 1000f
         val speed = hypot(nx - rawX, ny - rawY) / dt
         // Linear fuzzy membership for rapid motion (0 = slow, 1 = fast).
-        val tau=FuzzyControllers.cursorTau(speed)
+        val base=FuzzyControllers.cursorTau(speed)
+        // Keep slow-motion stability, but reduce lag as intent to move becomes clearer.
+        val motion=FuzzyCore.rise(speed,.05f,.55f)
+        val tau=if(responsive) (base*(1f-.40f*motion)).coerceAtLeast(.012f) else base
         tauSeconds=tau
-        val alpha = dt / (tau + dt)
+        val alpha = if(responsive) (1f-kotlin.math.exp(-dt/tau)) else dt/(tau+dt)
         x += alpha * (nx - x)
         y += alpha * (ny - y)
         rawX = nx; rawY = ny; previousTime = timeMs
