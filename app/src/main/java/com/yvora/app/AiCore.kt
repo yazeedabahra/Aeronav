@@ -9,7 +9,11 @@ internal enum class AiAction { SWIPE_LEFT, SWIPE_RIGHT, SWIPE_UP, SWIPE_DOWN, BA
  * No accessibility calls or side effects are possible from this module.
  */
 internal object AiCommandGate {
-    const val INSTRUCTION = "You are Yvora's navigation planning assistant. Return only a list of 1 to 4 exact action tokens, one per line: SWIPE_LEFT, SWIPE_RIGHT, SWIPE_UP, SWIPE_DOWN, BACK, HOME. If the request is ambiguous, requires screen contents, sensitive actions, or unsupported actions, return exactly UNSUPPORTED. Do not add markdown, explanations, parameters, or other text. All actions are previews only."
+    const val INSTRUCTION = "You are Yvora's navigation planning assistant. Return only a list of 1 to 4 exact action tokens, one per line: SWIPE_LEFT, SWIPE_RIGHT, SWIPE_UP, SWIPE_DOWN, BACK, HOME. If the request is ambiguous, requires screen contents, sensitive actions, or unsupported actions, return exactly UNSUPPORTED. Do not add markdown, explanations, parameters, or other text. BACK or HOME may appear only as the last action. Never request tapping, typing, permissions changes or sensitive operations. A user must review and explicitly start the plan locally."
+    /** Global navigation is terminal, so a plan cannot follow the user into another app. */
+    fun executable(actions: List<AiAction>): Boolean =
+        actions.size in 1..4 && actions.dropLast(1).none { it==AiAction.BACK || it==AiAction.HOME }
+
     fun parse(raw: String): List<AiAction>? {
         if (raw.length > 200) return null
         val trimmed = raw.trim()

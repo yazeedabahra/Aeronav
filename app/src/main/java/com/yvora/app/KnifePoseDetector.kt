@@ -11,6 +11,8 @@ internal class KnifePoseDetector {
     private var exitCount = 0
     var candidate = false
         private set
+    var relaxedScore = 0f
+        private set
     var edgeScore = 0f
         private set
     fun set(i: Int, x: Float, y: Float, z: Float) {
@@ -39,12 +41,16 @@ internal class KnifePoseDetector {
         }
         edgeScore=(1f-abs(nz)/norm).coerceIn(0f,1f)
         var extended=0
+        var equivalent=0f
         for (base in 5..17 step 4) {
-            if (straight(base,base+1,base+2) > 0.35f &&
-                straight(base+1,base+2,base+3) > 0.20f &&
-                dist(base,base+3) > len*0.42f) extended++
+            val a=straight(base,base+1,base+2)
+            val b=straight(base+1,base+2,base+3)
+            val reach=dist(base,base+3)/len
+            if(a>0.35f && b>0.20f && reach>0.42f) extended++
+            equivalent+=minOf(FuzzyPose.rise(a,0.05f,.65f),FuzzyPose.rise(b,-.10f,.55f),FuzzyPose.rise(reach,.27f,.60f))
         }
         val together=dist(8,12)+dist(12,16)+dist(16,20)
+        relaxedScore=FuzzyPose.score(edgeScore,equivalent,together/width)
         val valid=extended>=3 && together <= width*1.40f && edgeScore >= (if (armed) 0.43f else 0.63f)
         candidate = valid
         if (valid) {
@@ -56,5 +62,5 @@ internal class KnifePoseDetector {
         }
         return armed
     }
-    fun reset() { armed=false; enterCount=0; exitCount=0; edgeScore=0f; candidate=false }
+    fun reset() { armed=false; enterCount=0; exitCount=0; edgeScore=0f; candidate=false; relaxedScore=0f }
 }

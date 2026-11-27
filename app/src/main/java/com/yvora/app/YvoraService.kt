@@ -206,7 +206,10 @@ class YvoraService : LifecycleService() {
         lowRamDevice = activityManager.isLowRamDevice || activityManager.memoryClass <= 128
         cameraDetail = CameraSettings.readDetail(this)
         dualHandMode = CameraSettings.readDualHand(this)
-        cursors.forEach { it.recognizer.setControlRange(CameraSettings.readRange(this)) }
+        cursors.forEach {
+            it.recognizer.setControlRange(CameraSettings.readRange(this))
+            it.recognizer.configureAssist(CameraSettings.readAssist(this), CameraSettings.readAssistLevel(this))
+        }
         framePacer = FramePacer(if (lowRamDevice) 100L else 66L)
         thermalPolicy = ThermalPolicy(lowRamDevice)
         powerManager = getSystemService(POWER_SERVICE) as PowerManager
@@ -258,6 +261,7 @@ class YvoraService : LifecycleService() {
 
     override fun onDestroy() {
         stopped = true
+        YvoraAccessibilityService.stopAi("Yvora engine stopped")
         if (receiverRegistered) {
             unregisterReceiver(powerReceiver)
             receiverRegistered = false
@@ -373,6 +377,7 @@ class YvoraService : LifecycleService() {
         val changed = reason != pauseReason
         pauseReason = reason
         if (reason != null) {
+            if (thermalPolicy.cooling || !powerManager.isInteractive) YvoraAccessibilityService.stopAi("AI paused for screen or thermal safety")
             if (cameraRunning || cameraStarting) stopCamera()
             statusListener?.onStatus(false, "Paused", false, false, reason)
         } else if (modelReady && !cameraRunning && !cameraStarting) {
@@ -564,6 +569,15 @@ class YvoraService : LifecycleService() {
         sampleX=first?.rawX ?: Float.NaN
         sampleY=first?.rawY ?: Float.NaN
         analysisWidth=width;analysisHeight=height
+        if(YvoraAccessibilityService.aiActive()) {
+            // Explicit pinch or recognized swipe interrupts running AI, never injects a competing stroke.
+            if(!calibrationMode && YvoraAccessibilityService.aiRunning() && detected.any { it.pinchAction==PinchAction.PENDING || it.triggeredGesture!=null }) {
+                YvoraAccessibilityService.stopAi("AI stopped by manual gesture")
+            }
+            cursors.forEach { it.hide() }
+            statusListener?.onStatus(first!=null,"AI navigation",false,false,"AI owns input; use Stop AI or a manual pinch to interrupt")
+            return
+        }
         if(calibrationMode) {
             forceHidePointer()
             statusListener?.onStatus(first!=null,"Calibration",false,false,"Safe calibration")
