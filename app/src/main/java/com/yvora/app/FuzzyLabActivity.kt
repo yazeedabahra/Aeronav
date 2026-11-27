@@ -29,6 +29,7 @@ class FuzzyLabActivity:AppCompatActivity() {
             live.text=if(engine==null) "Engine stopped. Start Yvora to see live degrees."
                 else buildString {
                     append("Thermal membership: "+fmt(engine.fuzzyThermal())+" | analysis target: "+engine.fuzzyInterval()+" ms\n")
+                    append("Configured control mode: "+engine.transformModeName()+"\n")
                     append("Identity: "+if(engine.identityUncertain()) "ambiguous" else "no ambiguity detected")
                     append("\nTouch arbitration and zoom injection disabled during safe lab mode.\n")
                     for(slot in 0..1) {

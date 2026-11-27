@@ -9,7 +9,7 @@ internal data class AiRoute(val actions:List<AiAction>?,val coverage:Float,val s
 internal object FuzzyAiRouter {
     private fun norm(s:String)=s.trim().lowercase(Locale.ROOT)
         .replace(Regex("[أإآ]"),"ا").replace(Regex("[ \\t]+")," ")
-        .trimEnd('.','!','؟','?')
+        .trimEnd('.','!')
         .trim()
     private val aliases=buildMap<String,AiAction> {
         fun add(a:AiAction,vararg phrases:String) { for(p in phrases) put(norm(p),a);put(a.name.lowercase(Locale.ROOT),a) }

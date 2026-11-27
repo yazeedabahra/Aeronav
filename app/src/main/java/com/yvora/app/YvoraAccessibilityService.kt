@@ -75,7 +75,7 @@ class YvoraAccessibilityService : AccessibilityService() {
         if(Build.VERSION.SDK_INT<24 || drag?.busy==true || aiActive() || zoomInProgress) return false
         val power=getSystemService(POWER_SERVICE) as android.os.PowerManager
         val lock=getSystemService(KEYGUARD_SERVICE) as android.app.KeyguardManager
-        if(!power.isInteractive || lock.isKeyguardLocked) return false
+        if(!power.isInteractive || lock.isKeyguardLocked || lock.isDeviceLocked) return false
         val dm=resources.displayMetrics
         val cx=dm.widthPixels/2f;val cy=dm.heightPixels/2f
         val scale=minOf(dm.widthPixels,dm.heightPixels).toFloat()
