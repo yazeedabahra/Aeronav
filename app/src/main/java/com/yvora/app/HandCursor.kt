@@ -55,9 +55,17 @@ internal class HandCursor(val slot:Int) {
     }
     fun position(nx:Float,ny:Float,width:Int,height:Int) {
         if(!nx.isFinite() || !ny.isFinite()) return
-        val px=nx.coerceIn(0f,1f)*(width-1).coerceAtLeast(0)
-        val py=ny.coerceIn(0f,1f)*(height-1).coerceAtLeast(0)
-        if(!initialized || kotlin.math.abs(px-x)>3f || kotlin.math.abs(py-y)>3f) {
+        val maxX=(width-1).coerceAtLeast(0).toFloat()
+        val maxY=(height-1).coerceAtLeast(0).toFloat()
+        fun snap(value:Float,max:Float):Float=when {
+            value<=3f -> 0f
+            value>=max-3f -> max
+            else -> value
+        }
+        val px=snap(nx.coerceIn(0f,1f)*maxX,maxX)
+        val py=snap(ny.coerceIn(0f,1f)*maxY,maxY)
+        val edgeChanged=(px!=x && (px==0f || px==maxX)) || (py!=y && (py==0f || py==maxY))
+        if(!initialized || edgeChanged || kotlin.math.abs(px-x)>3f || kotlin.math.abs(py-y)>3f) {
             x=px;y=py;initialized=true
         }
         val p=params ?: return

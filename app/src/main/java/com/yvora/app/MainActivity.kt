@@ -241,6 +241,7 @@ class MainActivity : AppCompatActivity() {
             }
         }
         linkSwitch.setOnCheckedChangeListener { _,enabled ->
+            if(!safeSwitch.isChecked) safeSwitch.isChecked=true
             cancelCaptureUi()
             ranges=ranges.link(enabled,selectedHand)
             persistRanges();restoreRange()
@@ -248,6 +249,7 @@ class MainActivity : AppCompatActivity() {
         val listener=object:SeekBar.OnSeekBarChangeListener {
             override fun onProgressChanged(seekBar:SeekBar?,progress:Int,fromUser:Boolean) {
                 if(fromUser && !restoringRange) {
+                    if(!safeSwitch.isChecked) safeSwitch.isChecked=true
                     cancelCaptureUi()
                     ranges=ranges.edit(selectedHand,currentRange())
                     persistRanges()
@@ -295,6 +297,7 @@ class MainActivity : AppCompatActivity() {
             YvoraService.instance?.setCalibrationMode(enabled)
         }
         findViewById<Button>(R.id.btnResetCalibration).setOnClickListener {
+            if(!safeSwitch.isChecked) safeSwitch.isChecked=true
             cancelCaptureUi()
             ranges=ranges.edit(selectedHand,ControlRange())
             persistRanges();restoreRange()
@@ -489,7 +492,7 @@ class MainActivity : AppCompatActivity() {
         lastUiUpdate = -1000L
         lastSampleUpdate = -1000L
         if (!running) {
-            calibrationView.setSample(Float.NaN, Float.NaN, 0, 0)
+            calibrationView.setSamples(Float.NaN, Float.NaN, Float.NaN, Float.NaN, 0, 0)
             calibrationStatus.text = "Start engine to test your camera."
             detailStatus.text = "Applies at next engine start."
         }
