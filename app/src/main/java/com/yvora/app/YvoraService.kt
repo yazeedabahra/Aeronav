@@ -836,9 +836,12 @@ class YvoraService : LifecycleService() {
                 val prediction=cursor.predictor.update(state.pointerX,state.pointerY,now,frameAgeMs,
                     FuzzyCore.and(fuzzyTraces[i].quality,identityDegrees[i]))
                 predictionDegrees[i]=prediction.degree
-                cursor.position(prediction.x,prediction.y,screenWidth,screenHeight)
+                cursor.movePointer(prediction.x,prediction.y,screenWidth,screenHeight,thermalPolicy.warm || lowRamDevice)
                 cursor.color()
-            } else cursor.predictor.reset()
+            } else {
+                // Stop display interpolation before calculating any tap/drag anchor.
+                cursor.freezeMotion();cursor.predictor.reset()
+            }
             cursor.show()
         }
 
@@ -858,7 +861,7 @@ class YvoraService : LifecycleService() {
         if(candidates.size>1 || owner!=null && candidates.any { it.slot!=owner }) {
             conflictStatus=if(chosen==null) "Ambiguous competing actions: abstain" else "Hand ${if(chosen==0) "left" else "right"} owns action"
             candidates.filter{it.slot!=chosen}.forEach { losing ->
-                cursors[losing.slot].armed=false;cursors[losing.slot].recognizer.reset();cursors[losing.slot].predictor.reset()
+                cursors[losing.slot].armed=false;cursors[losing.slot].freezeMotion();cursors[losing.slot].recognizer.reset();cursors[losing.slot].predictor.reset()
             }
         }
         val order=if(chosen==1) intArrayOf(1,0) else intArrayOf(0,1)
