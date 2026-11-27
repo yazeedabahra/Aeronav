@@ -13,7 +13,7 @@ import androidx.appcompat.app.AppCompatActivity
 import java.util.Locale
 
 /** Read-only live trace + isolated mathematical simulation. No gesture injection or network. */
-class FuzzyLabActivity:AppCompatActivity() {
+class FuzzyLabActivity: LocalizedActivity() {
     private val handler=Handler(Looper.getMainLooper())
     private var service:YvoraService?=null
     private var oldCalibration=false
@@ -26,7 +26,7 @@ class FuzzyLabActivity:AppCompatActivity() {
     private val tick=object:Runnable {
         override fun run() {
             val engine=YvoraService.instance
-            live.text=if(engine==null) "Engine stopped. Start Yvora to see live degrees."
+            live.text=if(engine==null) tr("Engine stopped. Start Yvora to see live degrees.","المحرك متوقف. شغّل Yvora لرؤية درجات الانتماء.")
                 else buildString {
                     append("Thermal membership: "+fmt(engine.fuzzyThermal())+" | analysis target: "+engine.fuzzyInterval()+" ms\n")
                     append("Configured control mode: "+engine.transformModeName()+"\n")
@@ -52,11 +52,11 @@ class FuzzyLabActivity:AppCompatActivity() {
         super.onCreate(savedInstanceState)
         val panel=LinearLayout(this).apply { orientation=LinearLayout.VERTICAL;setPadding(24,20,24,24) }
         fun text(value:String,size:Float=15f)=TextView(this).apply { text=value;textSize=size;panel.addView(this) }
-        text("YVORA FUZZY INTELLIGENCE",24f)
-        text("Live read-only telemetry. Hand injection is suspended while this lab is open. No data sent to AI.")
-        live=text("Waiting for engine…")
-        text("SANDBOX • change rules without affecting the phone",19f)
-        text("Membership values are degrees of compatibility, not probabilities. Operator choices here do not change runtime safety rules.")
+        text(tr("YVORA FUZZY INTELLIGENCE","مختبر الذكاء الضبابي YVORA"),24f)
+        text(tr("Live read-only telemetry. Hand injection is suspended while this lab is open. No data sent to AI.","قياسات مباشرة للقراءة فقط. يتوقف تنفيذ إيماءات اليد أثناء فتح المختبر. لا تُرسل بيانات إلى الذكاء الاصطناعي."))
+        live=text(tr("Waiting for engine…","بانتظار المحرك…"))
+        text(tr("SANDBOX • change rules without affecting the phone","بيئة تجريبية • غيّر القواعد دون التأثير على الهاتف"),19f)
+        text(tr("Membership values are degrees of compatibility, not probabilities. Operator choices here do not change runtime safety rules.","درجات الانتماء تمثل التوافق وليست احتمالات. خيارات العمليات هنا لا تغيّر قواعد الأمان أثناء التشغيل."))
         fun slider(label:String,initial:Float,update:(Float)->Unit) {
             val caption=text(label+": "+fmt(initial))
             panel.addView(SeekBar(this).apply {
@@ -82,14 +82,14 @@ class FuzzyLabActivity:AppCompatActivity() {
                 }
             })
         }
-        slider("Membership A",a){a=it};slider("Membership B",b){b=it};slider("Alpha cut",alpha){alpha=it}
-        text("T-Norm");picker(listOf("Minimum","Algebraic product")){t=TNorm.values()[it]}
-        text("S-Norm");picker(listOf("Maximum","Algebraic sum")){s=SNorm.values()[it]}
-        slider("Normalized hand speed",speed){speed=it}
+        slider(tr("Membership A","انتماء A"),a){a=it};slider(tr("Membership B","انتماء B"),b){b=it};slider(tr("Alpha cut","قطع ألفا (Alpha-Cut)"),alpha){alpha=it}
+        text(tr("T-Norm","الاقتران الضبابي (T-Norm)"));picker(listOf(tr("Minimum","القيمة الصغرى"),tr("Algebraic product","الضرب الجبري"))){t=TNorm.values()[it]}
+        text(tr("S-Norm","الفصل الضبابي (S-Norm)"));picker(listOf(tr("Maximum","القيمة الكبرى"),tr("Algebraic sum","الجمع الجبري"))){s=SNorm.values()[it]}
+        slider(tr("Normalized hand speed","سرعة اليد المعيارية"),speed){speed=it}
         graph=SpeedGraph(this)
         panel.addView(graph,LinearLayout.LayoutParams(LinearLayout.LayoutParams.MATCH_PARENT,(170*resources.displayMetrics.density).toInt()))
         simulation=text("")
-        text("Graph: blue = slow, green = medium, amber = fast; white marker = input. Mamdani output is a discrete centroid example, Sugeno is a singleton weighted average. Only the actual cursor smoothing controller is used for runtime.")
+        text(tr("Graph: blue = slow, green = medium, amber = fast; white marker = input. Mamdani output is a discrete centroid example, Sugeno is a singleton weighted average. Only the actual cursor smoothing controller is used for runtime.","الرسم: أزرق = بطيء، أخضر = متوسط، كهرماني = سريع؛ العلامة البيضاء = المدخل. Mamdani مثال لمركز الثقل العددي، وSugeno متوسط موزون. وحده متحكم تنعيم المؤشر الفعلي يعمل أثناء التشغيل."))
         setContentView(ScrollView(this).apply { addView(panel) })
         render()
     }
@@ -109,8 +109,8 @@ class FuzzyLabActivity:AppCompatActivity() {
         val dmRight=FuzzyCore.or(FuzzyCore.not(a),FuzzyCore.not(b),s)
         simulation.text=buildString {
             append("AND = "+fmt(and)+" | OR = "+fmt(or)+"\nNOT A = "+fmt(FuzzyCore.not(a)))
-            append("\nAlpha cut (AND): "+if(FuzzyCore.alphaCut(and,alpha)) "accepted in sandbox" else "rejected in sandbox")
-            append("\nDe Morgan: "+fmt(dmLeft)+" vs "+fmt(dmRight)+" | "+if(kotlin.math.abs(dmLeft-dmRight)<.0001f) "equal for these inputs" else "not equal for this operator pair")
+            append("\nAlpha cut (AND): "+if(FuzzyCore.alphaCut(and,alpha)) tr("accepted in sandbox","مقبول في المختبر") else tr("rejected in sandbox","مرفوض في المختبر"))
+            append("\nDe Morgan: "+fmt(dmLeft)+" vs "+fmt(dmRight)+" | "+if(kotlin.math.abs(dmLeft-dmRight)<.0001f) tr("equal for these inputs","متساويان لهذه المدخلات") else tr("not equal for this operator pair","غير متساويين لهذا الزوج من العمليات"))
             append("\n\nMax-min: [A,B] ○ [[.9,.2],[.4,.8]]")
             append("\nOutput = ["+fmt(composed[0])+", "+fmt(composed[1])+"] | Height = "+fmt(FuzzyCore.height(composed)))
             append("\n\nSlow / medium / fast: "+deg.joinToString(" / "){fmt(it)})
@@ -121,7 +121,7 @@ class FuzzyLabActivity:AppCompatActivity() {
     }
     override fun onResume() {
         super.onResume()
-        YvoraAccessibilityService.stopAi("AI paused for Fuzzy Lab")
+        YvoraAccessibilityService.stopAi(tr("AI paused for Fuzzy Lab","أُوقف التحكم الذكي مؤقتًا لمختبر الفزي"))
         service=YvoraService.instance;oldCalibration=service?.isCalibrating==true
         service?.setCalibrationMode(true)
         handler.post(tick)

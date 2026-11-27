@@ -1,0 +1,74 @@
+<resources>
+<string name="app_name">Yvora</string>
+<string name="accessibility_description">يستخدم Yvora خدمة إمكانية الوصول لتنفيذ النقر والسحب على مستوى النظام اعتمادًا على تتبع اليد.</string>
+<string name="ui_1" formatted="false">نظام التحكم دون لمس</string>
+<string name="ui_2" formatted="false">معالجة محلية / أداء</string>
+<string name="ui_3" formatted="false">مؤشران لليدين (أعد تشغيل المحرك للتطبيق)</string>
+<string name="ui_4" formatted="false">إيماءات مساعدة (منطق ضبابي محلي؛ أعد تشغيل المحرك)</string>
+<string name="ui_5" formatted="false">اختر مرونة التعرف المناسبة لحركاتك، ثم أعد تشغيل المحرك.</string>
+<string name="ui_6" formatted="false">وضع التحكم (أعد تشغيل المحرك للتطبيق)</string>
+<string name="ui_7" formatted="false">اختر التحكم العادي أو التكبير أو التدوير أو المسارات المخصصة</string>
+<string name="ui_8" formatted="false">يتطلب التكبير والتدوير اليدين. افتح الكفين ثم اقرص الأصابع في كل يد، وغيّر المسافة للتكبير أو أدر الخط بينهما للتدوير. تتوقف النقرات والسحب العادي في هذه الأوضاع. يعمل حول مركز الشاشة في التطبيقات الداعمة.</string>
+<string name="ui_9" formatted="false">استوديو المسارات المخصصة</string>
+<string name="ui_10" formatted="false">استوديو الإيماءات الشخصية</string>
+<string name="ui_11" formatted="false">مختبر الذكاء الضبابي</string>
+<string name="ui_12" formatted="false">نواة الذكاء الاصطناعي / مختبر النماذج</string>
+<string name="ui_13" formatted="false">01 / نواة التحكم</string>
+<string name="ui_14" formatted="false">حالة المحرك</string>
+<string name="ui_15" formatted="false">استعداد</string>
+<string name="ui_16" formatted="false">تشغيل\nالمحرك</string>
+<string name="ui_17" formatted="false">شغّل المحرك للتعرف على إيماءات اليد.</string>
+<string name="ui_18" formatted="false">تشغيل في الخلفية</string>
+<string name="ui_19" formatted="false">إيقاف</string>
+<string name="ui_20" formatted="false">02 / القياسات المباشرة</string>
+<string name="ui_21" formatted="false">معدل النتائج</string>
+<string name="ui_22" formatted="false">عمر الإطار</string>
+<string name="ui_23" formatted="false">عدد النتائج في الثانية وعمر آخر إطار معالج. يتحدث أثناء التتبع فقط.</string>
+<string name="ui_24" formatted="false">تنظيم معدل المعالجة التكيفي مفعّل</string>
+<string name="ui_25" formatted="false">03 / معايرة الكاميرا</string>
+<string name="ui_26" formatted="false">اضبط مساحة الكاميرا النشطة حسب مدى حركة يدك المريح. المساحة الأصغر تحتاج حركة أقل للوصول إلى حواف الشاشة.</string>
+<string name="ui_27" formatted="false">معايرة آمنة (دون نقر أو سحب)</string>
+<string name="ui_28" formatted="false">ربط إعدادات X وY لليدين</string>
+<string name="ui_29" formatted="false">اختر اليد للمعايرة</string>
+<string name="ui_30" formatted="false">السماوي: اليسرى • الكهرماني: اليمنى. كل نطاق يصل إلى كامل الشاشة. ألغ الربط للتعديل المستقل.</string>
+<string name="ui_31" formatted="false">مخطط مساحة الكاميرا وموقع اليد المرصودة</string>
+<string name="ui_32" formatted="false">شغّل المحرك لاختبار الكاميرا.</string>
+<string name="ui_33" formatted="false">العرض 100% • الارتفاع 100%</string>
+<string name="ui_34" formatted="false">نطاق التحكم الأفقي</string>
+<string name="ui_35" formatted="false">نطاق التحكم العمودي</string>
+<string name="ui_36" formatted="false">المركز الأفقي</string>
+<string name="ui_37" formatted="false">المركز العمودي</string>
+<string name="ui_38" formatted="false">بدء المعايرة التلقائية</string>
+<string name="ui_39" formatted="false">تستخدم المعايرة التلقائية الكف المفتوح المحدد فقط. راجع النطاق المقاس قبل تطبيقه. أوقف المعايرة الآمنة لاستئناف الإيماءات.</string>
+<string name="ui_40" formatted="false">تفاصيل المسافة (دقة كاميرا أعلى)</string>
+<string name="ui_41" formatted="false">اختياري: قد يساعد في تتبع اليد من مسافة أبعد، لكنه قد يقلل السرعة. لا يغير مجال رؤية العدسة.</string>
+<string name="ui_42" formatted="false">يُطبّق عند تشغيل المحرك مجددًا.</string>
+<string name="ui_43" formatted="false">إعادة ضبط نطاق التحكم المحدد</string>
+<string name="ui_44" formatted="false">04 / الأذونات</string>
+<string name="ui_45" formatted="false">العرض فوق التطبيقات</string>
+<string name="ui_46" formatted="false">إظهار مؤشر التحكم</string>
+<string name="ui_47" formatted="false">غير مفعّل</string>
+<string name="ui_48" formatted="false">تفعيل</string>
+<string name="ui_49" formatted="false">إمكانية الوصول</string>
+<string name="ui_50" formatted="false">تنفيذ النقر والسحب</string>
+<string name="ui_51" formatted="false">05 / اختبار الإيماءات</string>
+<string name="ui_52" formatted="false">تحقق من استجابة الخدمة قبل مغادرة التطبيق.</string>
+<string name="ui_53" formatted="false">أعلى</string>
+<string name="ui_54" formatted="false">أسفل</string>
+<string name="ui_55" formatted="false">نقر</string>
+<string name="ui_56" formatted="false">06 / دليل الإيماءات</string>
+<string name="ui_57" formatted="false">تحريك المؤشر</string>
+<string name="ui_58" formatted="false">افتح كفك لتحريك المؤشر.</string>
+<string name="ui_59" formatted="false">أرخِ الأصابع الأخرى. اقرص السبابة والإبهام ثم افتحهما للنقر. استمر حتى يصبح المؤشر أخضر، ثم حرّك اليد وافتح الأصابع للإفلات (Android 8+).</string>
+<string name="ui_60" formatted="false">تمرير المحتوى لأسفل</string>
+<string name="ui_61" formatted="false">اليد اليمنى: السبابة فقط.</string>
+<string name="ui_62" formatted="false">تمرير المحتوى لأعلى</string>
+<string name="ui_63" formatted="false">اليد اليمنى: السبابة والوسطى.</string>
+<string name="ui_64" formatted="false">سحب لليسار</string>
+<string name="ui_65" formatted="false">بأي يد: مد الأصابع متقاربة، ووجّه حافة الكف نحو الكاميرا ثم تحرك يسارًا.</string>
+<string name="ui_66" formatted="false">سحب لليمين</string>
+<string name="ui_67" formatted="false">بأي يد: وجّه حافة الكف نحو الكاميرا وتحرك يمينًا، ثم واجه الكاميرا بالكف لإعادة التهيئة.</string>
+<string name="ui_68" formatted="false">07 / إعداد سريع</string>
+<string name="ui_69" formatted="false">فعّل الإذنين وشغّل المحرك ثم ضع يدك على بعد نحو 50–80 سم من الكاميرا. حافظ على إضاءة جيدة. استخدم إيقاف في الإشعار لإنهاء التتبع.</string>
+<string name="ui_70" formatted="false">YVORA / إيماءات محلية وذكاء اصطناعي اختياري</string>
+</resources>

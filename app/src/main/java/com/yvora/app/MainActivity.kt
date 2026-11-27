@@ -17,7 +17,7 @@ import androidx.appcompat.app.AppCompatActivity
 import androidx.core.app.ActivityCompat
 import androidx.core.content.ContextCompat
 
-class MainActivity : AppCompatActivity() {
+class MainActivity : LocalizedActivity() {
 
     private lateinit var txtOverlay: TextView
     private lateinit var txtAccessibility: TextView
@@ -75,12 +75,12 @@ class MainActivity : AppCompatActivity() {
                 val service = YvoraService.instance ?: return@runOnUiThread
                 val mode = when {
                     service.pauseReason != null -> service.pauseReason!!
-                    !handDetected -> "Searching for hand"
-                    service.isCalibrating -> "Safe calibration • Gestures disabled"
-                    service.gestureDispatch == "Dragging: touch held" && isTapPinching -> "Dragging • Open fingers to drop"
-                    isTapPinching -> "Pinch held"
-                    isGestureMode -> "Gesture armed"
-                    else -> "Pointer tracking"
+                    !handDetected -> tr("Searching for hand","البحث عن اليد")
+                    service.isCalibrating -> tr("Safe calibration • Gestures disabled","معايرة آمنة • الإيماءات معطّلة")
+                    service.gestureDispatch == "Dragging: touch held" && isTapPinching -> tr("Dragging • Open fingers to drop","سحب • افتح الأصابع للإفلات")
+                    isTapPinching -> tr("Pinch held","قرص مستمر")
+                    isGestureMode -> tr("Gesture armed","الإيماءة جاهزة")
+                    else -> tr("Pointer tracking","تتبع المؤشر")
                 }
                 val summary = "$mode • Last: $gesture"
                 val now = SystemClock.uptimeMillis()
@@ -90,28 +90,28 @@ class MainActivity : AppCompatActivity() {
                         service.sampleX(1),service.sampleY(1),service.analysisWidth,service.analysisHeight)
                     val x=service.sampleX(selectedHand);val y=service.sampleY(selectedHand)
                     if(capturing && !service.captureActive()) {
-                        capturing=false;autoButton.text="Start auto calibration"
-                        calibrationStatus.text="Capture expired or interrupted. Try again."
+                        capturing=false;autoButton.text=tr("Start auto calibration","بدء المعايرة التلقائية")
+                        calibrationStatus.text=tr("Capture expired or interrupted. Try again.","انتهت مهلة التسجيل أو انقطع. حاول مجددًا.")
                     } else calibrationStatus.text=if(capturing) "Move selected open palm to comfortable X/Y extremes. Samples: ${service.captureCount()}"
                         else if(x.isFinite() && y.isFinite()) "Selected hand • ${(x*100).toInt()}% X / ${(y*100).toInt()}% Y"
-                        else "Selected hand not detected"
+                        else tr("Selected hand not detected","لم تُرصد اليد المحددة")
                     detailStatus.text = if (distanceSwitch.isChecked != service.usingDistanceDetail)
-                        "Stop and restart engine to apply detail mode."
+                        tr("Stop and restart engine to apply detail mode.","أوقف المحرك وأعد تشغيله لتطبيق وضع التفاصيل.")
                         else if (service.analysisWidth > 0)
                             "Active analysis: ${service.analysisWidth} × ${service.analysisHeight}"
-                        else "Waiting for camera."
+                        else tr("Waiting for camera.","بانتظار الكاميرا.")
                 }
                 if (summary != previousStatus || now - lastUiUpdate >= 250L) {
                     previousStatus = summary
                     lastUiUpdate = now
-                    txtEngineState.text = if (service.pauseReason != null) "Paused" else if (handDetected) "Tracking active" else "Searching"
+                    txtEngineState.text = if (service.pauseReason != null) tr("Paused","متوقف مؤقتًا") else if (handDetected) tr("Tracking active","التتبع نشط") else tr("Searching","جاري البحث")
                     txtEngineState.setTextColor(tint(if (handDetected) R.color.accent_green else R.color.accent))
                     txtStatus.text = "$summary\n$debugInfo\n${service.gestureDispatch}"
                     val rate = service.resultRate
                     txtResultRate.text = if (rate > 0f) String.format(java.util.Locale.ROOT, "%.1f", rate) + " /s" else "—"
                     txtFrameAge.text = if (service.frameAgeMs >= 0) "${service.frameAgeMs} ms" else "—"
                     txtProfile.text = service.powerStatus
-                    btnStart.text = "ENGINE\nACTIVE"
+                    btnStart.text = tr("ENGINE\nACTIVE","المحرك\nنشط")
                 }
             }
         }
@@ -124,6 +124,14 @@ class MainActivity : AppCompatActivity() {
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
         setContentView(R.layout.activity_main)
+        findViewById<Button>(R.id.btnLanguage).setOnClickListener {
+            androidx.appcompat.app.AlertDialog.Builder(this)
+                .setTitle(tr("App language","لغة التطبيق"))
+                .setSingleChoiceItems(arrayOf("English","العربية"),if(AppLanguage.arabic) 1 else 0) { dialog,which ->
+                    dialog.dismiss()
+                    if(AppLanguage.select(this,which==1)) recreate()
+                }.setNegativeButton(tr("Cancel","إلغاء"),null).show()
+        }
         bindViews()
         setupButtons()
         setupCalibration()
@@ -133,7 +141,7 @@ class MainActivity : AppCompatActivity() {
         }
         findViewById<android.widget.Spinner>(R.id.spinnerDualMode).apply {
             adapter=android.widget.ArrayAdapter(this@MainActivity,android.R.layout.simple_spinner_dropdown_item,
-                listOf("Normal gestures","Zoom only (experimental)","Rotate only (experimental)","Custom trajectories (experimental)"))
+                listOf(tr("Normal gestures","الإيماءات العادية"),tr("Zoom only (experimental)","التكبير فقط (تجريبي)"),tr("Rotate only (experimental)","التدوير فقط (تجريبي)"),tr("Custom trajectories (experimental)","مسارات مخصصة (تجريبي)")))
             setSelection(CameraSettings.readDualMode(this@MainActivity).ordinal)
             onItemSelectedListener=object:android.widget.AdapterView.OnItemSelectedListener {
                 override fun onNothingSelected(parent:android.widget.AdapterView<*>?) {}
@@ -141,7 +149,7 @@ class MainActivity : AppCompatActivity() {
                     val selected=DualMode.values()[position]
                     if(CameraSettings.readDualMode(this@MainActivity)!=selected) {
                         CameraSettings.saveDualMode(this@MainActivity,selected)
-                        toast("Stop and restart engine to apply. Zoom and rotation require dual hands.")
+                        toast(tr("Stop and restart engine to apply. Zoom and rotation require dual hands.","أعد تشغيل المحرك للتطبيق. التكبير والتدوير يتطلبان اليدين."))
                     }
                 }
             }
@@ -152,7 +160,7 @@ class MainActivity : AppCompatActivity() {
         }
         findViewById<android.widget.Spinner>(R.id.spinnerAssistLevel).apply {
             adapter=android.widget.ArrayAdapter(this@MainActivity,android.R.layout.simple_spinner_dropdown_item,
-                listOf("Fewer false swipes","Balanced","More flexible swipes"))
+                listOf(tr("Fewer false swipes","تقليل السحب الخاطئ"),tr("Balanced","متوازن"),tr("More flexible swipes","سحب أكثر مرونة")))
             setSelection(CameraSettings.readAssistLevel(this@MainActivity)+1)
             onItemSelectedListener=object:android.widget.AdapterView.OnItemSelectedListener {
                 override fun onNothingSelected(parent:android.widget.AdapterView<*>?) {}
@@ -223,7 +231,7 @@ class MainActivity : AppCompatActivity() {
 
     private fun renderRange() {
         val r=ranges.effective(selectedHand)
-        val label=if(ranges.linked) "Shared (both hands)" else if(selectedHand==0) "Left hand" else "Right hand"
+        val label=if(ranges.linked) tr("Shared (both hands)","مشترك لليدين") else if(selectedHand==0) tr("Left hand","اليد اليسرى") else tr("Right hand","اليد اليمنى")
         rangeSummary.text="$label • X ${r.widthPercent}% • Y ${r.heightPercent}%\nCenter X ${r.horizontalCenter}% • Y ${r.verticalCenter}%"
         calibrationView.setRanges(ranges,selectedHand)
     }
@@ -243,7 +251,7 @@ class MainActivity : AppCompatActivity() {
     private fun cancelCaptureUi() {
         YvoraService.instance?.cancelRangeCapture()
         capturing=false
-        autoButton.text="Start auto calibration"
+        autoButton.text=tr("Start auto calibration","بدء المعايرة التلقائية")
     }
 
     private fun setupCalibration() {
@@ -251,7 +259,7 @@ class MainActivity : AppCompatActivity() {
         restoreRange()
         linkSwitch.isChecked=ranges.linked
         handPicker.adapter=android.widget.ArrayAdapter(this,android.R.layout.simple_spinner_dropdown_item,
-            listOf("Left hand (cyan)","Right hand (amber)"))
+            listOf(tr("Left hand (cyan)","اليسرى (سماوي)"),tr("Right hand (amber)","اليمنى (كهرماني)")))
         handPicker.onItemSelectedListener=object:android.widget.AdapterView.OnItemSelectedListener {
             override fun onNothingSelected(parent:android.widget.AdapterView<*>?) {}
             override fun onItemSelected(parent:android.widget.AdapterView<*>?,view:android.view.View?,position:Int,id:Long) {
@@ -279,18 +287,18 @@ class MainActivity : AppCompatActivity() {
         listOf(widthSeek,heightSeek,centerXSeek,centerYSeek).forEach { it.setOnSeekBarChangeListener(listener) }
         autoButton.setOnClickListener {
             val service=YvoraService.instance
-            if(service==null) { toast("Start the engine first");return@setOnClickListener }
+            if(service==null) { toast(tr("Start the engine first","شغّل المحرك أولًا"));return@setOnClickListener }
             if(capturing) {
                 val suggested=service.finishRangeCapture()
                 cancelCaptureUi()
                 if(suggested==null) {
-                    toast("Not enough reliable X/Y movement. Try again for 3–12 seconds.")
+                    toast(tr("Not enough reliable X/Y movement. Try again for 3–12 seconds.","الحركة الموثوقة غير كافية. حاول مجددًا لمدة 3–12 ثانية."))
                 } else {
                     androidx.appcompat.app.AlertDialog.Builder(this)
-                        .setTitle("Apply measured range?")
+                        .setTitle(tr("Apply measured range?","تطبيق النطاق المقاس؟"))
                         .setMessage("X ${suggested.widthPercent}% • Y ${suggested.heightPercent}%\nCenter X ${suggested.horizontalCenter}% • Y ${suggested.verticalCenter}%")
-                        .setNegativeButton("Cancel",null)
-                        .setPositiveButton("Apply") { _,_ ->
+                        .setNegativeButton(tr("Cancel","إلغاء"),null)
+                        .setPositiveButton(tr("Apply","تطبيق")) { _,_ ->
                             ranges=ranges.edit(selectedHand,suggested)
                             persistRanges();restoreRange()
                         }.show()
@@ -300,15 +308,15 @@ class MainActivity : AppCompatActivity() {
                 service.setCalibrationMode(true)
                 if(service.beginRangeCapture(selectedHand)) {
                     capturing=true
-                    autoButton.text="Finish and review range"
-                    calibrationStatus.text="Move your selected open palm across comfortable left/right and up/down extremes, then finish."
-                } else toast("Camera not ready or AI navigation active.")
+                    autoButton.text=tr("Finish and review range","إنهاء ومراجعة النطاق")
+                    calibrationStatus.text=tr("Move your selected open palm across comfortable left/right and up/down extremes, then finish.","حرّك الكف المفتوح المحدد إلى أقصى حدود مريحة أفقيًا وعموديًا، ثم أنهِ المعايرة.")
+                } else toast(tr("Camera not ready or AI navigation active.","الكاميرا غير جاهزة أو التحكم الذكي نشط."))
             }
         }
         distanceSwitch.isChecked=CameraSettings.readDetail(this)==CameraDetail.DISTANCE
         distanceSwitch.setOnCheckedChangeListener { _,enabled ->
             CameraSettings.saveDetail(this,if(enabled) CameraDetail.DISTANCE else CameraDetail.AUTO)
-            detailStatus.text=if(YvoraService.instance!=null) "Stop and restart engine to apply detail mode." else "Applies at next engine start."
+            detailStatus.text=if(YvoraService.instance!=null) tr("Stop and restart engine to apply detail mode.","أوقف المحرك وأعد تشغيله لتطبيق وضع التفاصيل.") else tr("Applies at next engine start.","يُطبّق عند تشغيل المحرك مجددًا.")
         }
         safeSwitch.setOnCheckedChangeListener { _,enabled ->
             cancelCaptureUi()
@@ -341,42 +349,42 @@ class MainActivity : AppCompatActivity() {
 
         btnStart.setOnClickListener {
             if (!hasCamera()) {
-                toast("Camera permission required")
+                toast(tr("Camera permission required","إذن الكاميرا مطلوب"))
                 return@setOnClickListener
             }
             if (!hasOverlay()) {
-                toast("Overlay permission required")
+                toast(tr("Overlay permission required","إذن العرض فوق التطبيقات مطلوب"))
                 return@setOnClickListener
             }
 
             // Check if already running
             if (YvoraService.instance != null) {
-                toast("⚡ Yvora is already running")
+                toast(tr("⚡ Yvora is already running","Yvora يعمل بالفعل"))
                 return@setOnClickListener
             }
 
             startYvora()
-            txtEngineState.text = "Starting"
-            txtStatus.text = "Initializing hand tracking"
+            txtEngineState.text = tr("Starting","جاري التشغيل")
+            txtStatus.text = tr("Initializing hand tracking","تهيئة تتبع اليد")
         }
 
         btnRunBg.setOnClickListener {
             if (safeSwitch.isChecked) {
-                toast("Turn off safe calibration before running in background")
+                toast(tr("Turn off safe calibration before running in background","أوقف المعايرة الآمنة قبل التشغيل في الخلفية"))
                 return@setOnClickListener
             }
             if (!hasCamera()) {
-                toast("Camera permission required")
+                toast(tr("Camera permission required","إذن الكاميرا مطلوب"))
                 return@setOnClickListener
             }
             if (!hasOverlay()) {
-                toast("Overlay permission required")
+                toast(tr("Overlay permission required","إذن العرض فوق التطبيقات مطلوب"))
                 return@setOnClickListener
             }
 
             // Check if already running
             if (YvoraService.instance != null) {
-                toast("⚡ Already running — going to background")
+                toast(tr("⚡ Already running — going to background","المحرك يعمل بالفعل — الانتقال للخلفية"))
                 YvoraService.instance?.forceHidePointer()
                 android.os.Handler(android.os.Looper.getMainLooper()).postDelayed({
                     val home = Intent(Intent.ACTION_MAIN).apply {
@@ -397,30 +405,30 @@ class MainActivity : AppCompatActivity() {
                 }
                 startActivity(home)
             }, 300)
-            toast("✅ Yvora running in background")
+            toast(tr("✅ Yvora running in background","Yvora يعمل في الخلفية"))
         }
 
         btnStop.setOnClickListener {
             // Check if running
             if (YvoraService.instance == null) {
-                toast("❌ Yvora is not running")
+                toast(tr("❌ Yvora is not running","Yvora لا يعمل"))
                 return@setOnClickListener
             }
 
             YvoraService.instance?.forceHidePointer()
             stopYvora()
-            txtEngineState.text = "Stopping"
-            txtStatus.text = "Ending hand tracking"
+            txtEngineState.text = tr("Stopping","جاري الإيقاف")
+            txtStatus.text = tr("Ending hand tracking","إنهاء تتبع اليد")
         }
 
         btnTestUp.setOnClickListener {
             val ok = YvoraAccessibilityService.performScroll("up")
-            toast(if (ok) "✅ Scroll UP" else "❌ Enable accessibility first")
+            toast(if (ok) tr("✅ Scroll UP","تمرير لأعلى") else tr("❌ Enable accessibility first","فعّل إمكانية الوصول أولًا"))
         }
 
         btnTestDown.setOnClickListener {
             val ok = YvoraAccessibilityService.performScroll("down")
-            toast(if (ok) "✅ Scroll DOWN" else "❌ Enable accessibility first")
+            toast(if (ok) tr("✅ Scroll DOWN","تمرير لأسفل") else tr("❌ Enable accessibility first","فعّل إمكانية الوصول أولًا"))
         }
 
         btnTestTap.setOnClickListener {
@@ -430,9 +438,9 @@ class MainActivity : AppCompatActivity() {
                     service.screenWidth / 2f,
                     service.screenHeight / 2f
                 )
-                toast(if (ok) "✅ Tap center" else "❌ Enable accessibility first")
+                toast(if (ok) tr("✅ Tap center","نقر المركز") else tr("❌ Enable accessibility first","فعّل إمكانية الوصول أولًا"))
             } else {
-                toast("Start Yvora first")
+                toast(tr("Start Yvora first","شغّل Yvora أولًا"))
             }
         }
     }
@@ -483,36 +491,36 @@ class MainActivity : AppCompatActivity() {
     private fun updateStatuses() {
         val ov = hasOverlay()
         txtOverlay.text =
-            if (ov) "Enabled" else "Not enabled"
+            if (ov) tr("Enabled","مفعّل") else tr("Not enabled","غير مفعّل")
         txtOverlay.setTextColor(
             if (ov) tint(R.color.accent_green) else tint(R.color.accent_orange)
         )
-        btnOverlay.text = if (ov) "Settings" else "Enable"
+        btnOverlay.text = if (ov) tr("Settings","الإعدادات") else tr("Enable","تفعيل")
 
         val ac = YvoraAccessibilityService.isEnabled()
         txtAccessibility.text =
-            if (ac) "Enabled" else "Not enabled"
+            if (ac) tr("Enabled","مفعّل") else tr("Not enabled","غير مفعّل")
         txtAccessibility.setTextColor(
             if (ac) tint(R.color.accent_green) else tint(R.color.accent_orange)
         )
-        btnAccessibility.text = if (ac) "Settings" else "Enable"
+        btnAccessibility.text = if (ac) tr("Settings","الإعدادات") else tr("Enable","تفعيل")
 
         val running = YvoraService.instance != null
-        txtEngineState.text = if (running) "Engine running" else "Standby"
+        txtEngineState.text = if (running) tr("Engine running","المحرك يعمل") else tr("Standby","استعداد")
         txtEngineState.setTextColor(tint(R.color.accent))
-        txtStatus.text = if (running) "Waiting for a tracking result" else "Start to detect hand gestures."
+        txtStatus.text = if (running) tr("Waiting for a tracking result","بانتظار نتيجة التتبع") else tr("Start to detect hand gestures.","شغّل المحرك للتعرف على إيماءات اليد.")
         txtStatus.setTextColor(tint(R.color.text_secondary))
-        btnStart.text = if (running) "ENGINE\nACTIVE" else "START\nENGINE"
+        btnStart.text = if (running) tr("ENGINE\nACTIVE","المحرك\nنشط") else tr("START\nENGINE","تشغيل\nالمحرك")
         txtResultRate.text = "—"
         txtFrameAge.text = "—"
-        txtProfile.text = "Adaptive pacing enabled"
+        txtProfile.text = tr("Adaptive pacing enabled","تنظيم معدل المعالجة التكيفي مفعّل")
         previousStatus = ""
         lastUiUpdate = -1000L
         lastSampleUpdate = -1000L
         if (!running) {
             calibrationView.setSamples(Float.NaN, Float.NaN, Float.NaN, Float.NaN, 0, 0)
-            calibrationStatus.text = "Start engine to test your camera."
-            detailStatus.text = "Applies at next engine start."
+            calibrationStatus.text = tr("Start engine to test your camera.","شغّل المحرك لاختبار الكاميرا.")
+            detailStatus.text = tr("Applies at next engine start.","يُطبّق عند تشغيل المحرك مجددًا.")
         }
 
     }
