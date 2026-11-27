@@ -155,14 +155,114 @@ class YvoraService : LifecycleService() {
     val usingDistanceDetail: Boolean get() = cameraDetail == CameraDetail.DISTANCE
 
     // These methods are called only on the main thread.
-    internal fun updateControlRange(range: ControlRange) {
-        cancelDrag()
-        cursors.forEach { it.reset(); it.recognizer.setControlRange(range) }
+    private var ranges=HandRanges()
+    private var dualMode=DualMode.NORMAL
+    private var motionSlot=0
+    private var motionTemplates:Map<AiAction,MotionPattern> = emptyMap()
+    private val motionClutch=MotionClutch()
+    private var motionTraining:MotionTraining?=null
+    internal fun startMotionTraining(slot:Int,action:AiAction):Boolean {
+        if(!cameraRunning || !calibrationMode || slot !in 0..1 || action !in trajectoryActions || YvoraAccessibilityService.aiActive() || YvoraAccessibilityService.zoomBusy()) return false
+        motionTraining=MotionTraining(slot,action,SystemClock.uptimeMillis());return true
+    }
+    internal fun motionTrainingCount()=motionTraining?.count ?: 0
+    internal fun motionTrainingStatus()=motionTraining?.status ?: "No active capture"
+    internal fun motionTrainingActive()=motionTraining!=null
+    internal fun cancelMotionTraining(){motionTraining=null}
+    internal fun finishMotionTraining():MotionPattern? {
+        val t=motionTraining ?: return null;motionTraining=null
+        return if(cameraRunning && calibrationMode) t.finish(SystemClock.uptimeMillis()) else null
+    }
+    private val zoomEngine=FuzzyZoom()
+    private val rotationEngine=FuzzyRotation()
+    private var zoomDegree=0f
+    private var zoomMessage="Off"
+    internal fun zoomActiveMode()=dualMode!=DualMode.NORMAL
+    internal fun transformModeName()=dualMode.name
+    internal fun zoomMembership()=zoomDegree
+    internal fun zoomTrace()=zoomMessage
+    private var poseTraining:PoseTraining?=null
+    internal fun beginPoseTraining(slot:Int):Boolean {
+        if(slot !in 0..1 || !cameraRunning || !calibrationMode || YvoraAccessibilityService.aiActive() || YvoraAccessibilityService.zoomBusy()) return false
+        poseTraining=PoseTraining(slot,SystemClock.uptimeMillis())
+        return true
+    }
+    internal fun trainingCount()=poseTraining?.count ?: 0
+    internal fun trainingActive()=poseTraining!=null
+    internal fun cancelPoseTraining(){poseTraining=null}
+    internal fun finishPoseTraining():PoseFeatures? {
+        val training=poseTraining ?: return null
+        poseTraining=null
+        return if(calibrationMode && cameraRunning) training.finish(SystemClock.uptimeMillis()) else null
+    }
+    internal fun reloadPersonalPose(slot:Int) {
+        if(slot !in 0..1 || !calibrationMode) return
+        cursors[slot].recognizer.setPersonalTemplate(CameraSettings.readPersonalPose(this,slot))
+        cursors[slot].reset()
+    }
+    private var fuzzyTraces=Array(2){FuzzyHandTrace()}
+    private val identity=FuzzyHandIdentity()
+    private var identityDegrees=FloatArray(2)
+    private var identityAmbiguous=false
+    private var predictionDegrees=FloatArray(2)
+    private var conflictStatus="None"
+    internal fun identityDegree(slot:Int)=identityDegrees[slot]
+    internal fun predictionDegree(slot:Int)=predictionDegrees[slot]
+    internal fun conflictTrace()=conflictStatus
+    internal fun identityUncertain()=identityAmbiguous
+    private var lastFuzzyAt=-1L
+    internal fun fuzzyTrace(slot:Int):FuzzyHandTrace =
+        if(cameraRunning && lastFuzzyAt>=0 && SystemClock.uptimeMillis()-lastFuzzyAt<=750L) fuzzyTraces[slot] else FuzzyHandTrace()
+    internal fun fuzzyThermal():Float=thermalPolicy.fuzzyHeat
+    internal fun fuzzyInterval():Long=analysisIntervalMs
+    private fun clearFuzzyTraces() { cancelPoseTraining();cancelMotionTraining();motionClutch.reset();lastFuzzyAt=-1L;fuzzyTraces=Array(2){FuzzyHandTrace()};identity.reset();identityDegrees.fill(0f);predictionDegrees.fill(0f);identityAmbiguous=false;conflictStatus="None" }
+    private val trackingWatchdog=object:Runnable {
+        override fun run() {
+            if(stopped) return
+            if(cameraRunning && lastFuzzyAt>=0 && SystemClock.uptimeMillis()-lastFuzzyAt>750L) {
+                clearFuzzyTraces();forceHidePointer()
+                sampleX=Float.NaN;sampleY=Float.NaN
+                sampleXs.fill(Float.NaN);sampleYs.fill(Float.NaN);cancelRangeCapture();clearFuzzyTraces()
+                statusListener?.onStatus(false,"Tracking timed out",false,false,"Open palm to re-arm")
+            }
+            mainHandler.postDelayed(this,150L)
+        }
+    }
+    private val sampleXs=FloatArray(2){Float.NaN}
+    private val sampleYs=FloatArray(2){Float.NaN}
+    private var capture:RangeCapture?=null
+    internal fun sampleX(slot:Int)=sampleXs[slot]
+    internal fun sampleY(slot:Int)=sampleYs[slot]
+    internal fun captureCount():Int=capture?.count ?: 0
+    internal fun captureActive():Boolean=capture!=null
+    internal fun beginRangeCapture(slot:Int):Boolean {
+        if(slot !in 0..1 || !cameraRunning || !calibrationMode || YvoraAccessibilityService.aiActive()) return false
+        capture=RangeCapture(slot,SystemClock.uptimeMillis())
+        return true
+    }
+    internal fun cancelRangeCapture() { capture=null }
+    internal fun finishRangeCapture():ControlRange? {
+        val active=capture ?: return null
+        capture=null
+        return if(cameraRunning && calibrationMode) active.finish(SystemClock.uptimeMillis()) else null
+    }
+    internal fun updateControlRanges(value:HandRanges) {
+        if(ranges==value) return
+        if((0..1).any { ranges.effective(it)!=value.effective(it) }) {
+            cancelDrag()
+            cursors.forEachIndexed { slot,cursor ->
+                cursor.reset();cursor.recognizer.setControlRange(value.effective(slot))
+            }
+        }
+        ranges=value
     }
 
     internal fun setCalibrationMode(enabled: Boolean) {
         if (calibrationMode == enabled) return
         calibrationMode = enabled
+        cancelMotionTraining()
+        cancelPoseTraining()
+        cancelRangeCapture()
         forceHidePointer()
     }
     val isLowRamProfile: Boolean get() = lowRamDevice
@@ -206,9 +306,15 @@ class YvoraService : LifecycleService() {
         lowRamDevice = activityManager.isLowRamDevice || activityManager.memoryClass <= 128
         cameraDetail = CameraSettings.readDetail(this)
         dualHandMode = CameraSettings.readDualHand(this)
-        cursors.forEach {
-            it.recognizer.setControlRange(CameraSettings.readRange(this))
-            it.recognizer.configureAssist(CameraSettings.readAssist(this), CameraSettings.readAssistLevel(this))
+        val requestedMode=CameraSettings.readDualMode(this)
+        dualMode=if(!dualHandMode && requestedMode in listOf(DualMode.ZOOM,DualMode.ROTATE)) DualMode.NORMAL else requestedMode
+        motionSlot=CameraSettings.readMotionSlot(this)
+        motionTemplates=CameraSettings.readMotions(this,motionSlot)
+        ranges=CameraSettings.readRanges(this)
+        cursors.forEachIndexed { slot,cursor ->
+            cursor.recognizer.setPersonalTemplate(CameraSettings.readPersonalPose(this,slot))
+            cursor.recognizer.setControlRange(ranges.effective(slot))
+            cursor.recognizer.configureAssist(CameraSettings.readAssist(this), CameraSettings.readAssistLevel(this))
         }
         framePacer = FramePacer(if (lowRamDevice) 100L else 66L)
         thermalPolicy = ThermalPolicy(lowRamDevice)
@@ -238,6 +344,7 @@ class YvoraService : LifecycleService() {
                 setupOverlayWindows()
                 forceHidePointer()
                 registerPowerMonitoring()
+                mainHandler.post(trackingWatchdog)
                 cameraExecutor.execute {
                     if (!stopped) initMediaPipe()
                     val ready = handLandmarker != null
@@ -306,6 +413,7 @@ class YvoraService : LifecycleService() {
     }
 
     fun forceHidePointer() {
+        motionClutch.reset();zoomEngine.reset();rotationEngine.reset();zoomDegree=0f;zoomMessage=if(dualMode!=DualMode.NORMAL) "Open both palms to arm" else "Off"
         cancelDrag()
         cursors.forEach { it.reset() }
     }
@@ -404,6 +512,7 @@ class YvoraService : LifecycleService() {
         thermalPolicy.observe(SystemClock.uptimeMillis(), false, 0f, 0f, 0, false)
         sampleX = Float.NaN
         sampleY = Float.NaN
+        sampleXs.fill(Float.NaN);sampleYs.fill(Float.NaN);cancelRangeCapture();clearFuzzyTraces()
         resultRate = 0f
         frameAgeMs = -1L
         rateWindowStart = -1L
@@ -523,6 +632,7 @@ class YvoraService : LifecycleService() {
                                 forceHidePointer()
                                 sampleX = Float.NaN
                                 sampleY = Float.NaN
+                                sampleXs.fill(Float.NaN);sampleYs.fill(Float.NaN);cancelRangeCapture();clearFuzzyTraces()
                                 statusListener?.onStatus(false, "None", false, false, "")
                             }
                         }
@@ -545,12 +655,34 @@ class YvoraService : LifecycleService() {
 
     private fun onHandLandmarkerResult(result: HandLandmarkerResult, width: Int, height: Int) {
         val now=SystemClock.uptimeMillis()
-        val labels=result.landmarks().indices.map { index ->
-            result.handednesses().getOrNull(index)?.firstOrNull()?.takeIf { it.score() >= 0.65f }?.categoryName()
+        val observations=result.landmarks().mapIndexed { index,points ->
+            val label=result.handednesses().getOrNull(index)?.firstOrNull()
+            val ids=intArrayOf(0,5,9,13,17)
+            val px=if(points.size>=21) ids.sumOf { points[it].x().toDouble() }.toFloat()/5f else Float.NaN
+            val py=if(points.size>=21) ids.sumOf { points[it].y().toDouble() }.toFloat()/5f else Float.NaN
+            HandObservation(label?.categoryName(),label?.score() ?: 0f,px,py)
         }
-        val assignment=HandSlots.assign(labels)
+        val identification=identity.update(observations,now)
+        val assignment=identification.indices
+        identityDegrees=identification.degrees;identityAmbiguous=identification.ambiguous
+        predictionDegrees.fill(0f);conflictStatus="None"
         val states=cursors.mapIndexed { slot,cursor ->
-            cursor.recognizer.processResult(result,width,height,handIndex=assignment[slot])
+            cursor.recognizer.processResult(result,width,height,handIndex=assignment[slot],frameAgeMs=frameAgeMs)
+        }
+        fuzzyTraces=Array(2){ cursors[it].recognizer.fuzzyTrace }
+        lastFuzzyAt=now
+        fun motionSample(slot:Int):ZoomSample? {
+            val state=states[slot];val tr=fuzzyTraces[slot]
+            return if(state.handDetected && !identityAmbiguous) ZoomSample(state.rawX,state.rawY,state.isPointerMode,tr.pinchRatio,FuzzyCore.and(tr.quality,identityDegrees[slot])) else null
+        }
+        val motionAspect=height.toFloat()/width.coerceAtLeast(1)
+        motionTraining?.let { t ->
+            if(t.expired(now) || !calibrationMode || YvoraAccessibilityService.aiActive()) cancelMotionTraining()
+            else t.observe(motionSample(t.slot),now,motionAspect)
+        }
+        poseTraining?.let { session ->
+            if(session.expired(now) || !calibrationMode || YvoraAccessibilityService.aiActive()) cancelPoseTraining()
+            else if(!identityAmbiguous) session.add(fuzzyTraces[session.slot],now)
         }
         val detected=states.filter { it.handDetected }
         val first=detected.firstOrNull()
@@ -568,8 +700,21 @@ class YvoraService : LifecycleService() {
         analysisIntervalMs=thermalPolicy.interval(now)
         sampleX=first?.rawX ?: Float.NaN
         sampleY=first?.rawY ?: Float.NaN
+        for(slot in 0..1) {
+            sampleXs[slot]=states[slot].rawX
+            sampleYs[slot]=states[slot].rawY
+        }
+        capture?.let { active ->
+            if(active.expired(now) || !calibrationMode || YvoraAccessibilityService.aiActive()) capture=null
+            else {
+                val state=states[active.slot]
+                if(state.handDetected && state.isPointerMode && !state.isTapPinching)
+                    active.add(state.rawX,state.rawY,now)
+            }
+        }
         analysisWidth=width;analysisHeight=height
         if(YvoraAccessibilityService.aiActive()) {
+            motionClutch.reset();zoomEngine.reset();rotationEngine.reset();zoomDegree=0f
             // Explicit pinch or recognized swipe interrupts running AI, never injects a competing stroke.
             if(!calibrationMode && YvoraAccessibilityService.aiRunning() && detected.any { it.pinchAction==PinchAction.PENDING || it.triggeredGesture!=null }) {
                 YvoraAccessibilityService.stopAi("AI stopped by manual gesture")
@@ -579,11 +724,82 @@ class YvoraService : LifecycleService() {
             return
         }
         if(calibrationMode) {
-            forceHidePointer()
+            // Reset touch state, but keep identity and prediction history available for lab.
+            for(i in 0..1) if(states[i].handDetected && states[i].isPointerMode) {
+                val state=states[i]
+                predictionDegrees[i]=cursors[i].predictor.update(state.pointerX,state.pointerY,now,frameAgeMs,fuzzyTraces[i].quality).degree
+            } else cursors[i].predictor.reset()
+            cancelDrag()
+            cursors.forEach { it.hide();it.armed=false }
             statusListener?.onStatus(first!=null,"Calibration",false,false,"Safe calibration")
             return
         }
 
+        if(dualMode==DualMode.CUSTOM) {
+            val result=motionClutch.update(motionSample(motionSlot),now,motionAspect)
+            val match=result.pattern?.let{MotionSimilarity.choose(it,motionTemplates)}
+            zoomDegree=match?.second ?: 0f
+            zoomMessage=if(result.pattern!=null) {
+                if(match==null) "No unambiguous saved trajectory" else "Matched "+match.first.name
+            } else result.status
+            for(i in 0..1) {
+                val state=states[i];val cursor=cursors[i]
+                cursor.armed=false;cursor.predictor.reset()
+                if(i==motionSlot && state.handDetected && !identityAmbiguous) {
+                    cursor.position(state.pointerX,state.pointerY,screenWidth,screenHeight);cursor.show()
+                } else cursor.hide()
+            }
+            if(match!=null) {
+                val direction=match.first.name.removePrefix("SWIPE_").lowercase(java.util.Locale.ROOT)
+                val ok=YvoraAccessibilityService.performCustomScroll(direction)
+                gestureDispatch=if(ok) "Custom "+match.first.name+" dispatched" else "Custom gesture rejected"
+                if(!ok) DiagnosticCounters.rejected()
+            }
+            statusListener?.onStatus(first!=null,"Custom trajectories",false,true,zoomMessage+" | "+gestureDispatch)
+            return
+        }
+
+        if(dualMode!=DualMode.NORMAL) {
+            // Dedicated mode: never let either individual recognizer inject a tap/drag/swipe.
+            fun zoomSample(slot:Int):ZoomSample? {
+                val state=states[slot];val tr=fuzzyTraces[slot]
+                return if(state.handDetected && !identityAmbiguous) ZoomSample(state.rawX,state.rawY,
+                    state.isPointerMode,tr.pinchRatio,FuzzyCore.and(tr.quality,identityDegrees[slot])) else null
+            }
+            val a=zoomSample(0);val b=zoomSample(1)
+            val aspect=height.toFloat()/width.coerceAtLeast(1)
+            val zoom=if(dualMode==DualMode.ZOOM) zoomEngine.update(a,b,now,aspect) else null
+            val rotation=if(dualMode==DualMode.ROTATE) rotationEngine.update(a,b,now,aspect) else null
+            zoomDegree=zoom?.degree ?: rotation?.degree ?: 0f
+            zoomMessage=zoom?.message ?: rotation?.message ?: "Open both palms to arm"
+            val action=zoom?.action!=null || rotation?.action!=null
+            for(i in 0..1) {
+                val state=states[i];val cursor=cursors[i]
+                cursor.armed=false;cursor.predictor.reset()
+                if(state.handDetected && !identityAmbiguous) {
+                    cursor.position(state.pointerX,state.pointerY,screenWidth,screenHeight)
+                    cursor.color(if(action) android.graphics.Color.GREEN else android.graphics.Color.CYAN)
+                    cursor.show()
+                } else cursor.hide()
+            }
+            if(action) {
+                val za=zoom?.action;val ra=rotation?.action
+                val ok=if(za!=null) YvoraAccessibilityService.performZoom(za)
+                    else ra!=null && YvoraAccessibilityService.performRotation(ra)
+                gestureDispatch=if(ok) "${dualMode.name} ${za?.name ?: ra?.name} dispatched"
+                    else "Transform rejected (busy or accessibility unavailable)"
+                if(!ok) DiagnosticCounters.rejected()
+            }
+            statusListener?.onStatus(first!=null,"${dualMode.name} mode",false,true,zoomMessage+" | "+gestureDispatch)
+            return
+        }
+
+        if(identityAmbiguous) {
+            forceHidePointer()
+            conflictStatus="Identity ambiguous: input suspended"
+            statusListener?.onStatus(false,"Identity uncertain",false,false,"Separate hands; open palm to re-arm")
+            return
+        }
         // Handle lost ownership before any new action. Never switch a held touch to another hand.
         touchArbiter.owner?.let { slot ->
             if(!states[slot].handDetected) {
@@ -593,6 +809,7 @@ class YvoraService : LifecycleService() {
             }
         }
         // Update both independent cursors even while another hand owns the touch stream.
+        val previouslyArmed=BooleanArray(2){cursors[it].armed}
         for(i in 0..1) {
             val state=states[i];val cursor=cursors[i]
             if(!state.handDetected) {
@@ -609,19 +826,38 @@ class YvoraService : LifecycleService() {
                 continue
             }
             if(state.isPointerMode && touchArbiter.owner!=i) {
-                cursor.position(state.pointerX,state.pointerY,screenWidth,screenHeight)
+                val prediction=cursor.predictor.update(state.pointerX,state.pointerY,now,frameAgeMs,
+                    FuzzyCore.and(fuzzyTraces[i].quality,identityDegrees[i]))
+                predictionDegrees[i]=prediction.degree
+                cursor.position(prediction.x,prediction.y,screenWidth,screenHeight)
                 cursor.color()
-            }
+            } else cursor.predictor.reset()
             cursor.show()
         }
 
-        // Current owner first, otherwise deterministic slot order. Android dispatchGesture
+        // Current owner first, otherwise choose unambiguous fuzzy candidate. Android dispatchGesture
         // cancels other streams; second hand remains free to move its cursor, not inject a touch.
         val owner=touchArbiter.owner
-        val order=if(owner==1) intArrayOf(1,0) else intArrayOf(0,1)
+        val candidates=(0..1).mapNotNull { i ->
+            val state=states[i];val tr=fuzzyTraces[i]
+            if(!state.handDetected || !previouslyArmed[i] || !cursors[i].armed) null
+            else if(state.pinchAction==PinchAction.PENDING) IntentCandidate(i,true,
+                FuzzyCore.and(tr.quality,FuzzyCore.fall(tr.pinchRatio,.12f,.34f)))
+            else if(state.triggeredGesture!=null) IntentCandidate(i,false,
+                FuzzyCore.and(tr.quality,if(state.triggeredGesture=="LEFT" || state.triggeredGesture=="RIGHT") tr.swipe else .8f))
+            else null
+        }
+        val chosen=FuzzyConflict.choose(owner,candidates)
+        if(candidates.size>1 || owner!=null && candidates.any { it.slot!=owner }) {
+            conflictStatus=if(chosen==null) "Ambiguous competing actions: abstain" else "Hand ${if(chosen==0) "left" else "right"} owns action"
+            candidates.filter{it.slot!=chosen}.forEach { losing ->
+                cursors[losing.slot].armed=false;cursors[losing.slot].recognizer.reset();cursors[losing.slot].predictor.reset()
+            }
+        }
+        val order=if(chosen==1) intArrayOf(1,0) else intArrayOf(0,1)
         for(i in order) {
             val state=states[i];val cursor=cursors[i]
-            if(!state.handDetected || !cursor.armed) continue
+            if(!state.handDetected || !cursor.armed || !previouslyArmed[i]) continue
             if(state.pinchAction!=PinchAction.NONE) {
                 when(state.pinchAction) {
                     PinchAction.PENDING -> {

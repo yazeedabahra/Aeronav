@@ -68,6 +68,10 @@ class GestureRecognizer {
     private val fuzzyIntent = FuzzyIntentGate()
     private var assistEnabled=false
     private var assistThreshold=.61f
+    private var personalTemplate:PoseFeatures?=null
+    internal fun setPersonalTemplate(value:PoseFeatures?) { personalTemplate=value;fuzzyIntent.reset() }
+    internal var fuzzyTrace=FuzzyHandTrace()
+        private set
 
     internal fun configureAssist(enabled:Boolean, level:Int) {
         assistEnabled=enabled;assistThreshold=FuzzyPose.threshold(level);fuzzyIntent.reset()
@@ -104,6 +108,7 @@ class GestureRecognizer {
         geometry.reset()
         knifePose.reset()
         fuzzyIntent.reset()
+        fuzzyTrace=FuzzyHandTrace()
     }
 
     // -------------------------------------------------------
@@ -115,7 +120,8 @@ class GestureRecognizer {
         imageWidth: Int,
         imageHeight: Int,
         supportsDrag: Boolean = android.os.Build.VERSION.SDK_INT >= 26,
-        handIndex: Int = 0
+        handIndex: Int = 0,
+        frameAgeMs: Long = 0L
     ): GestureState {
 
         if (handIndex !in result.landmarks().indices) {
@@ -127,6 +133,7 @@ class GestureRecognizer {
             geometry.reset()
             knifePose.reset()
             fuzzyIntent.reset()
+            fuzzyTrace=FuzzyHandTrace()
             return GestureState(
                 handDetected = false,
                 pinchAction = PinchAction.CANCEL,
@@ -150,7 +157,7 @@ class GestureRecognizer {
                 landmarks[13].x() + landmarks[17].x()) / 5f
         val rawPY = (landmarks[0].y() + landmarks[5].y() + landmarks[9].y() +
                 landmarks[13].y() + landmarks[17].y()) / 5f
-        pointerFilter.update(controlRange.mapX(rawPX), controlRange.mapY(rawPY), now)
+        pointerFilter.update(controlRange.pointerX(rawPX), controlRange.pointerY(rawPY), now)
 
         // --- Finger analysis ---
         val thumbUp  = isThumbExtended(landmarks, w, h)
@@ -183,7 +190,13 @@ class GestureRecognizer {
         val ownedBefore = pinchDrag.ownsPinch
         // Opt-in local fuzzy interpretation tolerates partially extended/rotated poses.
         // A close pinch and the normal face-on pointer are not treated as assisted swipes.
-        val relaxed=fuzzyIntent.update(assistEnabled,knifePose.relaxedScore,assistThreshold,!ownedBefore && tapDist>=.34f)
+        val labelScore=result.handednesses().getOrNull(handIndex)?.firstOrNull()?.score() ?: 0f
+        val quality=FuzzyControllers.quality(labelScore,frameAgeMs)
+        val pinchClear=!ownedBefore && tapDist>=.34f
+        val standardScore=FuzzyControllers.assistedScore(knifePose.relaxedScore,quality,pinchClear)
+        val personalScore=PersonalGesture.degree(knifePose.features,personalTemplate,quality,pinchClear)
+        val assistedScore=FuzzyCore.or(standardScore,personalScore)
+        val relaxed=fuzzyIntent.update(assistEnabled,assistedScore,assistThreshold,pinchClear)
         val swipePose = (edgePose || relaxed) && !ownedBefore
         // The same temporal motion gate and one-shot latch still apply.
         val swipe = if (ownedBefore) null else horizontalSwipe.updatePose(swipePose, rawPX, rawPY, now,
@@ -290,6 +303,9 @@ class GestureRecognizer {
         val debugInfo = "$displayHand hand | Fingers: $fingerStr ($totalUp) | " +
                 "${if (swipePose) "Knife hand: swipe ready" else if (gestureArmed) "Armed: $gestureDirection" else "Idle"} | Assist: ${if(assistEnabled) (knifePose.relaxedScore*100).toInt().toString()+"%" else "Off"} | Edge: ${(knifePose.edgeScore * 100).toInt()}% | Pinch: ${(tapDist * 100).toInt()}%"
 
+        fuzzyTrace=FuzzyHandTrace(true,labelScore,quality,knifePose.relaxedScore,assistedScore,
+            horizontalSwipe.lastMembership,pointerFilter.tauSeconds,assistThreshold,assistEnabled,
+            triggeredGesture ?: gestureDirection ?: if(isPointerMode) "Pointer" else "None",tapDist,knifePose.features,personalScore)
         return GestureState(
             handDetected     = true,
             pointerX         = pointerFilter.x,

@@ -10,8 +10,8 @@ internal data class ControlRange(
     private fun start(span: Float, center: Int): Float =
         (center.coerceIn(0, 100) / 100f - span / 2f).coerceIn(0f, 1f - span)
 
-    private val width = widthPercent.coerceIn(30, 100) / 100f
-    private val height = heightPercent.coerceIn(30, 100) / 100f
+    private val width = widthPercent.coerceIn(10, 100) / 100f
+    private val height = heightPercent.coerceIn(10, 100) / 100f
     val left = start(width, horizontalCenter)
     val top = start(height, verticalCenter)
     val right = left + width
@@ -19,4 +19,9 @@ internal data class ControlRange(
 
     fun mapX(x: Float) = ((x - left) / width).coerceIn(0f, 1f)
     fun mapY(y: Float) = ((y - top) / height).coerceIn(0f, 1f)
+
+    // Slightly expand the reachable pointer range without a discontinuous jump.
+    fun pointerX(x:Float)=edgeCompensation(mapX(x))
+    fun pointerY(y:Float)=edgeCompensation(mapY(y))
+    private fun edgeCompensation(value:Float)=((value-.025f)/.95f).coerceIn(0f,1f)
 }

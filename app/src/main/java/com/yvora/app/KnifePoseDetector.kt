@@ -11,6 +11,8 @@ internal class KnifePoseDetector {
     private var exitCount = 0
     var candidate = false
         private set
+    var features:PoseFeatures?=null
+        private set
     var relaxedScore = 0f
         private set
     var edgeScore = 0f
@@ -50,6 +52,8 @@ internal class KnifePoseDetector {
             equivalent+=minOf(FuzzyPose.rise(a,0.05f,.65f),FuzzyPose.rise(b,-.10f,.55f),FuzzyPose.rise(reach,.27f,.60f))
         }
         val together=dist(8,12)+dist(12,16)+dist(16,20)
+        features=PoseFeatures(FuzzyCore.rise(edgeScore,.24f,.80f),
+            FuzzyCore.rise(equivalent,1.35f,3.15f),FuzzyCore.fall(together/width,1.15f,2f))
         relaxedScore=FuzzyPose.score(edgeScore,equivalent,together/width)
         val valid=extended>=3 && together <= width*1.40f && edgeScore >= (if (armed) 0.43f else 0.63f)
         candidate = valid
@@ -62,5 +66,5 @@ internal class KnifePoseDetector {
         }
         return armed
     }
-    fun reset() { armed=false; enterCount=0; exitCount=0; edgeScore=0f; candidate=false; relaxedScore=0f }
+    fun reset() { armed=false; enterCount=0; exitCount=0; edgeScore=0f; candidate=false; relaxedScore=0f;features=null }
 }

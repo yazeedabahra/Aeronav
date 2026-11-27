@@ -37,6 +37,12 @@ class MainActivity : AppCompatActivity() {
     private lateinit var distanceSwitch: Switch
     private lateinit var safeSwitch: Switch
     private var restoringRange = false
+    private var ranges=HandRanges()
+    private var selectedHand=0
+    private lateinit var linkSwitch:Switch
+    private lateinit var handPicker:android.widget.Spinner
+    private lateinit var autoButton:Button
+    private var capturing=false
     private var lastSampleUpdate = -1000L
     private var lastUiUpdate = -1000L
     private var previousStatus = ""
@@ -80,12 +86,15 @@ class MainActivity : AppCompatActivity() {
                 val now = SystemClock.uptimeMillis()
                 if (now - lastSampleUpdate >= 250L) {
                     lastSampleUpdate = now
-                    calibrationView.setSample(service.sampleX, service.sampleY,
-                        service.analysisWidth, service.analysisHeight)
-                    calibrationStatus.text = if (!handDetected) "No hand detected"
-                        else if (service.sampleX.isFinite() && service.sampleY.isFinite())
-                            "Hand detected • ${(service.sampleX * 100).toInt()}% X / ${(service.sampleY * 100).toInt()}% Y"
-                        else "Hand detected"
+                    calibrationView.setSamples(service.sampleX(0),service.sampleY(0),
+                        service.sampleX(1),service.sampleY(1),service.analysisWidth,service.analysisHeight)
+                    val x=service.sampleX(selectedHand);val y=service.sampleY(selectedHand)
+                    if(capturing && !service.captureActive()) {
+                        capturing=false;autoButton.text="Start auto calibration"
+                        calibrationStatus.text="Capture expired or interrupted. Try again."
+                    } else calibrationStatus.text=if(capturing) "Move selected open palm to comfortable X/Y extremes. Samples: ${service.captureCount()}"
+                        else if(x.isFinite() && y.isFinite()) "Selected hand • ${(x*100).toInt()}% X / ${(y*100).toInt()}% Y"
+                        else "Selected hand not detected"
                     detailStatus.text = if (distanceSwitch.isChecked != service.usingDistanceDetail)
                         "Stop and restart engine to apply detail mode."
                         else if (service.analysisWidth > 0)
@@ -108,7 +117,7 @@ class MainActivity : AppCompatActivity() {
         }
 
         override fun onStopped() {
-            runOnUiThread { updateStatuses() }
+            runOnUiThread { updateStatuses();cancelCaptureUi();calibrationView.setSamples(Float.NaN,Float.NaN,Float.NaN,Float.NaN,0,0) }
         }
     }
 
@@ -121,6 +130,21 @@ class MainActivity : AppCompatActivity() {
         findViewById<Switch>(R.id.switchDualHand).apply {
             isChecked=CameraSettings.readDualHand(this@MainActivity)
             setOnCheckedChangeListener { _, enabled -> CameraSettings.saveDualHand(this@MainActivity,enabled) }
+        }
+        findViewById<android.widget.Spinner>(R.id.spinnerDualMode).apply {
+            adapter=android.widget.ArrayAdapter(this@MainActivity,android.R.layout.simple_spinner_dropdown_item,
+                listOf("Normal gestures","Zoom only (experimental)","Rotate only (experimental)","Custom trajectories (experimental)"))
+            setSelection(CameraSettings.readDualMode(this@MainActivity).ordinal)
+            onItemSelectedListener=object:android.widget.AdapterView.OnItemSelectedListener {
+                override fun onNothingSelected(parent:android.widget.AdapterView<*>?) {}
+                override fun onItemSelected(parent:android.widget.AdapterView<*>?,view:android.view.View?,position:Int,id:Long) {
+                    val selected=DualMode.values()[position]
+                    if(CameraSettings.readDualMode(this@MainActivity)!=selected) {
+                        CameraSettings.saveDualMode(this@MainActivity,selected)
+                        toast("Stop and restart engine to apply. Zoom and rotation require dual hands.")
+                    }
+                }
+            }
         }
         findViewById<Switch>(R.id.switchAssistIntent).apply {
             isChecked=CameraSettings.readAssist(this@MainActivity)
@@ -137,6 +161,9 @@ class MainActivity : AppCompatActivity() {
                 }
             }
         }
+        findViewById<Button>(R.id.btnTrajectoryStudio).setOnClickListener { startActivity(Intent(this,TrajectoryStudioActivity::class.java)) }
+        findViewById<Button>(R.id.btnPersonalStudio).setOnClickListener { startActivity(Intent(this,PersonalGestureActivity::class.java)) }
+        findViewById<Button>(R.id.btnFuzzyLab).setOnClickListener { startActivity(Intent(this,FuzzyLabActivity::class.java)) }
         findViewById<Button>(R.id.btnAiCore).setOnClickListener { startActivity(Intent(this, AiLabActivity::class.java)) }
         requestPermissions()
     }
@@ -151,6 +178,7 @@ class MainActivity : AppCompatActivity() {
 
     override fun onPause() {
         super.onPause()
+        cancelCaptureUi()
         if (safeSwitch.isChecked) {
             // Keep input suppressed until the user explicitly exits safe mode or stops.
             YvoraService.instance?.setCalibrationMode(true)
@@ -176,6 +204,9 @@ class MainActivity : AppCompatActivity() {
         centerYSeek      = findViewById(R.id.seekCenterY)
         distanceSwitch   = findViewById(R.id.switchDistanceDetail)
         safeSwitch       = findViewById(R.id.switchSafeCalibration)
+        linkSwitch       = findViewById(R.id.switchLinkedRanges)
+        handPicker       = findViewById(R.id.spinnerCalibrationHand)
+        autoButton       = findViewById(R.id.btnAutoRange)
         btnOverlay       = findViewById(R.id.btnOverlay)
         btnAccessibility = findViewById(R.id.btnAccessibility)
         btnStart         = findViewById(R.id.btnStart)
@@ -187,53 +218,107 @@ class MainActivity : AppCompatActivity() {
     }
 
     private fun currentRange() = ControlRange(
-        widthSeek.progress + 30, heightSeek.progress + 30,
-        centerXSeek.progress, centerYSeek.progress
+        widthSeek.progress+10,heightSeek.progress+10,centerXSeek.progress,centerYSeek.progress
     )
 
-    private fun applyRange(save: Boolean) {
-        val range = currentRange()
-        rangeSummary.text = "Width ${range.widthPercent}%  •  Height ${range.heightPercent}%\nCenter X ${range.horizontalCenter}%  •  Y ${range.verticalCenter}%"
-        calibrationView.setRange(range)
-        YvoraService.instance?.updateControlRange(range)
-        if (save) CameraSettings.saveRange(this, range)
+    private fun renderRange() {
+        val r=ranges.effective(selectedHand)
+        val label=if(ranges.linked) "Shared (both hands)" else if(selectedHand==0) "Left hand" else "Right hand"
+        rangeSummary.text="$label • X ${r.widthPercent}% • Y ${r.heightPercent}%\nCenter X ${r.horizontalCenter}% • Y ${r.verticalCenter}%"
+        calibrationView.setRanges(ranges,selectedHand)
     }
-
-    private fun restoreRange(range: ControlRange) {
-        restoringRange = true
-        widthSeek.progress = range.widthPercent - 30
-        heightSeek.progress = range.heightPercent - 30
-        centerXSeek.progress = range.horizontalCenter
-        centerYSeek.progress = range.verticalCenter
-        restoringRange = false
-        applyRange(false)
+    private fun persistRanges() {
+        CameraSettings.saveRanges(this,ranges)
+        YvoraService.instance?.updateControlRanges(ranges)
+        renderRange()
+    }
+    private fun restoreRange() {
+        val r=ranges.effective(selectedHand)
+        restoringRange=true
+        widthSeek.progress=r.widthPercent-10;heightSeek.progress=r.heightPercent-10
+        centerXSeek.progress=r.horizontalCenter;centerYSeek.progress=r.verticalCenter
+        restoringRange=false
+        renderRange()
+    }
+    private fun cancelCaptureUi() {
+        YvoraService.instance?.cancelRangeCapture()
+        capturing=false
+        autoButton.text="Start auto calibration"
     }
 
     private fun setupCalibration() {
-        restoreRange(CameraSettings.readRange(this))
-        distanceSwitch.isChecked = CameraSettings.readDetail(this) == CameraDetail.DISTANCE
-        val listener = object : SeekBar.OnSeekBarChangeListener {
-            override fun onProgressChanged(seekBar: SeekBar?, progress: Int, fromUser: Boolean) {
-                if (fromUser && !restoringRange) applyRange(true)
+        ranges=CameraSettings.readRanges(this)
+        restoreRange()
+        linkSwitch.isChecked=ranges.linked
+        handPicker.adapter=android.widget.ArrayAdapter(this,android.R.layout.simple_spinner_dropdown_item,
+            listOf("Left hand (cyan)","Right hand (amber)"))
+        handPicker.onItemSelectedListener=object:android.widget.AdapterView.OnItemSelectedListener {
+            override fun onNothingSelected(parent:android.widget.AdapterView<*>?) {}
+            override fun onItemSelected(parent:android.widget.AdapterView<*>?,view:android.view.View?,position:Int,id:Long) {
+                if(selectedHand!=position) { cancelCaptureUi();selectedHand=position;restoreRange() }
             }
-            override fun onStartTrackingTouch(seekBar: SeekBar?) {}
-            override fun onStopTrackingTouch(seekBar: SeekBar?) {}
         }
-        listOf(widthSeek, heightSeek, centerXSeek, centerYSeek).forEach {
-            it.setOnSeekBarChangeListener(listener)
+        linkSwitch.setOnCheckedChangeListener { _,enabled ->
+            if(!safeSwitch.isChecked) safeSwitch.isChecked=true
+            cancelCaptureUi()
+            ranges=ranges.link(enabled,selectedHand)
+            persistRanges();restoreRange()
         }
-        distanceSwitch.setOnCheckedChangeListener { _, enabled ->
-            CameraSettings.saveDetail(this, if (enabled) CameraDetail.DISTANCE else CameraDetail.AUTO)
-            detailStatus.text = if (YvoraService.instance != null)
-                "Stop and restart engine to apply detail mode." else "Applies at next engine start."
+        val listener=object:SeekBar.OnSeekBarChangeListener {
+            override fun onProgressChanged(seekBar:SeekBar?,progress:Int,fromUser:Boolean) {
+                if(fromUser && !restoringRange) {
+                    if(!safeSwitch.isChecked) safeSwitch.isChecked=true
+                    cancelCaptureUi()
+                    ranges=ranges.edit(selectedHand,currentRange())
+                    persistRanges()
+                }
+            }
+            override fun onStartTrackingTouch(seekBar:SeekBar?) { if(!safeSwitch.isChecked) safeSwitch.isChecked=true }
+            override fun onStopTrackingTouch(seekBar:SeekBar?) {}
         }
-        safeSwitch.setOnCheckedChangeListener { _, enabled ->
+        listOf(widthSeek,heightSeek,centerXSeek,centerYSeek).forEach { it.setOnSeekBarChangeListener(listener) }
+        autoButton.setOnClickListener {
+            val service=YvoraService.instance
+            if(service==null) { toast("Start the engine first");return@setOnClickListener }
+            if(capturing) {
+                val suggested=service.finishRangeCapture()
+                cancelCaptureUi()
+                if(suggested==null) {
+                    toast("Not enough reliable X/Y movement. Try again for 3–12 seconds.")
+                } else {
+                    androidx.appcompat.app.AlertDialog.Builder(this)
+                        .setTitle("Apply measured range?")
+                        .setMessage("X ${suggested.widthPercent}% • Y ${suggested.heightPercent}%\nCenter X ${suggested.horizontalCenter}% • Y ${suggested.verticalCenter}%")
+                        .setNegativeButton("Cancel",null)
+                        .setPositiveButton("Apply") { _,_ ->
+                            ranges=ranges.edit(selectedHand,suggested)
+                            persistRanges();restoreRange()
+                        }.show()
+                }
+            } else {
+                safeSwitch.isChecked=true
+                service.setCalibrationMode(true)
+                if(service.beginRangeCapture(selectedHand)) {
+                    capturing=true
+                    autoButton.text="Finish and review range"
+                    calibrationStatus.text="Move your selected open palm across comfortable left/right and up/down extremes, then finish."
+                } else toast("Camera not ready or AI navigation active.")
+            }
+        }
+        distanceSwitch.isChecked=CameraSettings.readDetail(this)==CameraDetail.DISTANCE
+        distanceSwitch.setOnCheckedChangeListener { _,enabled ->
+            CameraSettings.saveDetail(this,if(enabled) CameraDetail.DISTANCE else CameraDetail.AUTO)
+            detailStatus.text=if(YvoraService.instance!=null) "Stop and restart engine to apply detail mode." else "Applies at next engine start."
+        }
+        safeSwitch.setOnCheckedChangeListener { _,enabled ->
+            cancelCaptureUi()
             YvoraService.instance?.setCalibrationMode(enabled)
         }
         findViewById<Button>(R.id.btnResetCalibration).setOnClickListener {
-            restoreRange(ControlRange())
-            applyRange(true)
-            distanceSwitch.isChecked = false
+            if(!safeSwitch.isChecked) safeSwitch.isChecked=true
+            cancelCaptureUi()
+            ranges=ranges.edit(selectedHand,ControlRange())
+            persistRanges();restoreRange()
         }
     }
 
@@ -425,7 +510,7 @@ class MainActivity : AppCompatActivity() {
         lastUiUpdate = -1000L
         lastSampleUpdate = -1000L
         if (!running) {
-            calibrationView.setSample(Float.NaN, Float.NaN, 0, 0)
+            calibrationView.setSamples(Float.NaN, Float.NaN, Float.NaN, Float.NaN, 0, 0)
             calibrationStatus.text = "Start engine to test your camera."
             detailStatus.text = "Applies at next engine start."
         }
