@@ -78,12 +78,11 @@ class YvoraService : LifecycleService() {
     // -------------------------------------------------------
     // FIELDS
     // -------------------------------------------------------
-    private var windowManager: WindowManager? = null
-    private var pointerView: View? = null
-    private var pointerParams: WindowManager.LayoutParams? = null
+    private val cursors = Array(2) { HandCursor(it) }
+    private val touchArbiter = TouchArbiter()
+    private var dualHandMode = true
 
     private var handLandmarker: HandLandmarker? = null
-    private val gestureRecognizer = GestureRecognizer()
     private lateinit var cameraExecutor: java.util.concurrent.ExecutorService
     private var cameraProvider: ProcessCameraProvider? = null
     private var analysisUseCase: ImageAnalysis? = null
@@ -127,27 +126,16 @@ class YvoraService : LifecycleService() {
         }
     }
 
-    private var pointerX = 0f
-    private var pointerY = 0f
-    private var dragStarted = false
-    internal fun diagnosticState(): String = "engine_running=$cameraRunning; calibration=$calibrationMode; thermal_status=${if (Build.VERSION.SDK_INT >= 29) thermalLevel.toString() else "unavailable"}; battery_temp_tenths_c=${batteryTenths ?: "unavailable"}; analysis_target_ms=$analysisIntervalMs; analysis_resolution=${analysisWidth}x$analysisHeight; distance_detail=$usingDistanceDetail; accessibility_connected=${YvoraAccessibilityService.isEnabled()}"
+     internal fun diagnosticState(): String = "engine_running=$cameraRunning; calibration=$calibrationMode; thermal_status=${if (Build.VERSION.SDK_INT >= 29) thermalLevel.toString() else "unavailable"}; battery_temp_tenths_c=${batteryTenths ?: "unavailable"}; analysis_target_ms=$analysisIntervalMs; analysis_resolution=${analysisWidth}x$analysisHeight; distance_detail=$usingDistanceDetail; accessibility_connected=${YvoraAccessibilityService.isEnabled()}"
     var gestureDispatch = "No command yet"
         private set
-    private var pinchPending = false
-    private var pinchAnchorX = 0f
-    private var pinchAnchorY = 0f
-    private var pinchStartX = 0f
-    private var pinchStartY = 0f
     var screenWidth = 0
         private set
     var screenHeight = 0
         private set
 
-    private var isPointerVisible = false
-    private var isPointerAdded = false
 
     private val mainHandler = Handler(Looper.getMainLooper())
-    private val deadZone = 3f
     private var started = false
     @Volatile private var stopped = false
     private val resultPending = AtomicBoolean(false)
@@ -156,7 +144,6 @@ class YvoraService : LifecycleService() {
     private var cameraDetail = CameraDetail.AUTO
     private var calibrationMode = false
     val isCalibrating: Boolean get() = calibrationMode
-    private var needsOpenHand = false
     var sampleX = Float.NaN
         private set
     var sampleY = Float.NaN
@@ -169,19 +156,13 @@ class YvoraService : LifecycleService() {
 
     // These methods are called only on the main thread.
     internal fun updateControlRange(range: ControlRange) {
-        if (pinchPending || dragStarted) {
-            cancelDrag()
-            gestureRecognizer.reset()
-            needsOpenHand = true
-        }
-        gestureRecognizer.setControlRange(range)
+        cancelDrag()
+        cursors.forEach { it.reset(); it.recognizer.setControlRange(range) }
     }
 
     internal fun setCalibrationMode(enabled: Boolean) {
         if (calibrationMode == enabled) return
         calibrationMode = enabled
-        needsOpenHand = true
-        gestureRecognizer.reset()
         forceHidePointer()
     }
     val isLowRamProfile: Boolean get() = lowRamDevice
@@ -210,7 +191,6 @@ class YvoraService : LifecycleService() {
         }
     }
     private var lastFrameTimestamp = -1L
-    private var lastPointerColor: Int? = null
 
     // -------------------------------------------------------
     // LIFECYCLE
@@ -225,7 +205,11 @@ class YvoraService : LifecycleService() {
         val activityManager = getSystemService(ACTIVITY_SERVICE) as ActivityManager
         lowRamDevice = activityManager.isLowRamDevice || activityManager.memoryClass <= 128
         cameraDetail = CameraSettings.readDetail(this)
-        gestureRecognizer.setControlRange(CameraSettings.readRange(this))
+        dualHandMode = CameraSettings.readDualHand(this)
+        cursors.forEach {
+            it.recognizer.setControlRange(CameraSettings.readRange(this))
+            it.recognizer.configureAssist(CameraSettings.readAssist(this), CameraSettings.readAssistLevel(this))
+        }
         framePacer = FramePacer(if (lowRamDevice) 100L else 66L)
         thermalPolicy = ThermalPolicy(lowRamDevice)
         powerManager = getSystemService(POWER_SERVICE) as PowerManager
@@ -233,8 +217,6 @@ class YvoraService : LifecycleService() {
         val metrics = resources.displayMetrics
         screenWidth = metrics.widthPixels
         screenHeight = metrics.heightPixels
-        pointerX = screenWidth / 2f
-        pointerY = screenHeight / 2f
 
         createNotificationChannel()
     }
@@ -255,7 +237,6 @@ class YvoraService : LifecycleService() {
                 startForeground(NOTIFICATION_ID, buildNotification())
                 setupOverlayWindows()
                 forceHidePointer()
-                gestureRecognizer.reset()
                 registerPowerMonitoring()
                 cameraExecutor.execute {
                     if (!stopped) initMediaPipe()
@@ -280,6 +261,7 @@ class YvoraService : LifecycleService() {
 
     override fun onDestroy() {
         stopped = true
+        YvoraAccessibilityService.stopAi("Yvora engine stopped")
         if (receiverRegistered) {
             unregisterReceiver(powerReceiver)
             receiverRegistered = false
@@ -289,11 +271,7 @@ class YvoraService : LifecycleService() {
         super.onDestroy()
         Log.d(TAG, "onDestroy")
 
-        // Immediately hide pointer
-        try {
-            pointerView?.visibility = View.GONE
-            isPointerVisible = false
-        } catch (e: Exception) { }
+        cursors.forEach { it.hide() }
 
         mainHandler.removeCallbacksAndMessages(null)
 
@@ -309,13 +287,7 @@ class YvoraService : LifecycleService() {
         }
         cameraExecutor.shutdown()
 
-        try {
-            if (isPointerAdded && pointerView != null) {
-                windowManager?.removeView(pointerView)
-            }
-        } catch (e: Exception) {
-            Log.e(TAG, "removeView error: ${e.message}")
-        }
+        cursors.forEach { it.remove() }
 
         if (instance === this) {
             instance = null
@@ -327,78 +299,15 @@ class YvoraService : LifecycleService() {
     // OVERLAY SETUP
     // -------------------------------------------------------
 
-    @SuppressLint("InflateParams")
     private fun setupOverlayWindows() {
-        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.M) {
-            if (!Settings.canDrawOverlays(this)) {
-                Log.w(TAG, "No overlay permission")
-                return
-            }
-        }
-
-        windowManager = getSystemService(WINDOW_SERVICE) as WindowManager
-
-        val overlayType = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
-            WindowManager.LayoutParams.TYPE_APPLICATION_OVERLAY
-        } else {
-            @Suppress("DEPRECATION")
-            WindowManager.LayoutParams.TYPE_PHONE
-        }
-
-        // Visible pointer overlay
-        val inflater = LayoutInflater.from(this)
-        pointerView = inflater.inflate(R.layout.overlay_pointer, null)
-
-        pointerParams = WindowManager.LayoutParams(
-            WindowManager.LayoutParams.WRAP_CONTENT,
-            WindowManager.LayoutParams.WRAP_CONTENT,
-            overlayType,
-            WindowManager.LayoutParams.FLAG_NOT_FOCUSABLE
-                    or WindowManager.LayoutParams.FLAG_NOT_TOUCHABLE
-                    or WindowManager.LayoutParams.FLAG_LAYOUT_IN_SCREEN
-                    or WindowManager.LayoutParams.FLAG_LAYOUT_NO_LIMITS
-                    or WindowManager.LayoutParams.FLAG_NOT_TOUCH_MODAL,
-            PixelFormat.TRANSLUCENT
-        ).apply {
-            gravity = Gravity.TOP or Gravity.START
-            x = screenWidth / 2
-            y = screenHeight / 2
-        }
-
-        try {
-            windowManager?.addView(pointerView, pointerParams)
-            pointerView?.visibility = View.GONE
-            isPointerAdded = true
-            Log.d(TAG, "Pointer overlay added")
-        } catch (e: Exception) {
-            Log.e(TAG, "Pointer overlay failed: ${e.message}", e)
-        }
+        if (!Settings.canDrawOverlays(this)) return
+        val manager=getSystemService(WINDOW_SERVICE) as WindowManager
+        cursors.forEach { it.attach(this,manager) }
     }
-
-
-
-    // -------------------------------------------------------
-    // HIDING THE POINTER
-    // -------------------------------------------------------
 
     fun forceHidePointer() {
         cancelDrag()
-        gestureRecognizer.reset()
-        mainHandler.post {
-            try {
-                pointerView?.visibility = View.GONE
-                isPointerVisible = false
-                pointerX = screenWidth / 2f
-                pointerY = screenHeight / 2f
-                // Also reset pointer color to default
-                val inner = pointerView?.findViewById<View>(R.id.innerDot)
-                inner?.setBackgroundResource(R.drawable.pointer_inner)
-                lastPointerColor = android.graphics.Color.TRANSPARENT
-                Log.d(TAG, "Pointer force hidden and reset")
-            } catch (e: Exception) {
-                Log.e(TAG, "forceHidePointer error: ${e.message}")
-            }
-        }
+        cursors.forEach { it.reset() }
     }
 
     // -------------------------------------------------------
@@ -423,7 +332,7 @@ class YvoraService : LifecycleService() {
                 .setMinHandDetectionConfidence(0.5f)
                 .setMinTrackingConfidence(0.5f)
                 .setMinHandPresenceConfidence(0.5f)
-                .setNumHands(1)
+                .setNumHands(if (dualHandMode) 2 else 1)
                 .setRunningMode(RunningMode.VIDEO)
                 .build()
 
@@ -468,6 +377,7 @@ class YvoraService : LifecycleService() {
         val changed = reason != pauseReason
         pauseReason = reason
         if (reason != null) {
+            if (thermalPolicy.cooling || !powerManager.isInteractive) YvoraAccessibilityService.stopAi("AI paused for screen or thermal safety")
             if (cameraRunning || cameraStarting) stopCamera()
             statusListener?.onStatus(false, "Paused", false, false, reason)
         } else if (modelReady && !cameraRunning && !cameraStarting) {
@@ -490,9 +400,7 @@ class YvoraService : LifecycleService() {
         } catch (e: Exception) {
             Log.w(TAG, "Camera unbind failed", e)
         }
-        cancelDrag()
-        gestureRecognizer.reset()
-        needsOpenHand = true
+        forceHidePointer()
         thermalPolicy.observe(SystemClock.uptimeMillis(), false, 0f, 0f, 0, false)
         sampleX = Float.NaN
         sampleY = Float.NaN
@@ -500,8 +408,6 @@ class YvoraService : LifecycleService() {
         frameAgeMs = -1L
         rateWindowStart = -1L
         rateWindowCount = 0
-        pointerView?.visibility = View.GONE
-        isPointerVisible = false
     }
 
     @androidx.annotation.OptIn(markerClass = [ExperimentalCamera2Interop::class])
@@ -614,12 +520,9 @@ class YvoraService : LifecycleService() {
                                 onHandLandmarkerResult(result, width, height)
                             } else {
                                 DiagnosticCounters.stale()
-                                cancelDrag()
-                                gestureRecognizer.reset()
-                                needsOpenHand = true
+                                forceHidePointer()
                                 sampleX = Float.NaN
                                 sampleY = Float.NaN
-                                hidePointer()
                                 statusListener?.onStatus(false, "None", false, false, "")
                             }
                         }
@@ -641,286 +544,161 @@ class YvoraService : LifecycleService() {
     // -------------------------------------------------------
 
     private fun onHandLandmarkerResult(result: HandLandmarkerResult, width: Int, height: Int) {
-        val state = gestureRecognizer.processResult(result, width, height)
-        DiagnosticCounters.result(state.handDetected, frameAgeMs)
-        val now = SystemClock.uptimeMillis()
-        thermalPolicy.observe(now, state.handDetected, state.rawX, state.rawY, state.fingersUp,
-            state.isTapPinching || state.gestureArmed || state.pinchAction != PinchAction.NONE && state.handDetected)
-        analysisIntervalMs = thermalPolicy.interval(now)
-        sampleX = state.rawX
-        sampleY = state.rawY
-        analysisWidth = width
-        analysisHeight = height
-
-        // Calibration never injects system gestures. On exit require an open hand
-        // without a pinch before resuming input.
-        if (calibrationMode || needsOpenHand) {
-            cancelDrag()
-            if (!calibrationMode && state.handDetected && state.isPointerMode && !state.isTapPinching) {
-                needsOpenHand = false
-                gestureRecognizer.reset()
+        val now=SystemClock.uptimeMillis()
+        val labels=result.landmarks().indices.map { index ->
+            result.handednesses().getOrNull(index)?.firstOrNull()?.takeIf { it.score() >= 0.65f }?.categoryName()
+        }
+        val assignment=HandSlots.assign(labels)
+        val states=cursors.mapIndexed { slot,cursor ->
+            cursor.recognizer.processResult(result,width,height,handIndex=assignment[slot])
+        }
+        val detected=states.filter { it.handDetected }
+        val first=detected.firstOrNull()
+        DiagnosticCounters.result(first!=null,frameAgeMs)
+        // Use the moving hand and a second movement check to avoid cancellation of opposite motion.
+        var moving=false
+        for(i in 0..1) {
+            val state=states[i];val cursor=cursors[i]
+            if(state.handDetected && cursor.initialized &&
+                (kotlin.math.abs(state.pointerX*(screenWidth-1)-cursor.x)+
+                 kotlin.math.abs(state.pointerY*(screenHeight-1)-cursor.y)) > screenWidth*0.012f) moving=true
+        }
+        thermalPolicy.observe(now,first!=null,first?.rawX ?: 0f,first?.rawY ?: 0f,
+            detected.sumOf { it.fingersUp },moving || detected.any { it.isTapPinching || it.gestureArmed })
+        analysisIntervalMs=thermalPolicy.interval(now)
+        sampleX=first?.rawX ?: Float.NaN
+        sampleY=first?.rawY ?: Float.NaN
+        analysisWidth=width;analysisHeight=height
+        if(YvoraAccessibilityService.aiActive()) {
+            // Explicit pinch or recognized swipe interrupts running AI, never injects a competing stroke.
+            if(!calibrationMode && YvoraAccessibilityService.aiRunning() && detected.any { it.pinchAction==PinchAction.PENDING || it.triggeredGesture!=null }) {
+                YvoraAccessibilityService.stopAi("AI stopped by manual gesture")
             }
-            hidePointer()
-            statusListener?.onStatus(state.handDetected, state.lastGesture,
-                state.isTapPinching, state.gestureArmed, state.debugInfo)
+            cursors.forEach { it.hide() }
+            statusListener?.onStatus(first!=null,"AI navigation",false,false,"AI owns input; use Stop AI or a manual pinch to interrupt")
+            return
+        }
+        if(calibrationMode) {
+            forceHidePointer()
+            statusListener?.onStatus(first!=null,"Calibration",false,false,"Safe calibration")
             return
         }
 
-        if (state.pinchAction == PinchAction.START_DRAG) DiagnosticCounters.dragStart()
-        if (state.pinchAction == PinchAction.DROP) DiagnosticCounters.dragDrop()
-        if (state.triggeredGesture == "LEFT" || state.triggeredGesture == "RIGHT") DiagnosticCounters.swipe()
-        if (state.pinchAction != PinchAction.NONE) {
-            when (state.pinchAction) {
-                PinchAction.PENDING -> {
-                    if (!pinchPending) {
-                        pinchPending = true
-                        pinchAnchorX = pointerX
-                        pinchAnchorY = pointerY
-                        pinchStartX = state.pointerX
-                        pinchStartY = state.pointerY
-                    }
-                    showPointer()
-                    setPointerColor(android.graphics.Color.CYAN)
+        // Handle lost ownership before any new action. Never switch a held touch to another hand.
+        touchArbiter.owner?.let { slot ->
+            if(!states[slot].handDetected) {
+                YvoraAccessibilityService.endDrag(cancel=true)
+                touchArbiter.release(slot,now)
+                cursors[slot].reset()
+            }
+        }
+        // Update both independent cursors even while another hand owns the touch stream.
+        for(i in 0..1) {
+            val state=states[i];val cursor=cursors[i]
+            if(!state.handDetected) {
+                cursor.reset()
+                continue
+            }
+            if(!cursor.armed) {
+                if(state.isPointerMode && !state.isTapPinching) {
+                    cursor.armed=true
+                    cursor.recognizer.reset()
+                    cursor.position(state.pointerX,state.pointerY,screenWidth,screenHeight)
+                    cursor.color();cursor.show()
                 }
-                PinchAction.TAP -> {
-                    if (pinchPending && state.triggeredTap) {
-                        gestureDispatch = if (YvoraAccessibilityService.performTap(pinchAnchorX, pinchAnchorY)) "Tap dispatched" else "Tap rejected: check Accessibility"
-                        if (gestureDispatch.startsWith("Tap rejected")) DiagnosticCounters.rejected()
-                        flashPointer()
-                    }
-                    pinchPending = false
-                    setPointerColor(android.graphics.Color.TRANSPARENT)
-                }
-                PinchAction.START_DRAG -> {
-                    if (pinchPending) dragStarted = YvoraAccessibilityService.beginDrag(pinchAnchorX, pinchAnchorY)
-                    gestureDispatch = if (dragStarted) "Hold: waiting for Android" else "Drag rejected: check Accessibility"
-                    if (!dragStarted) DiagnosticCounters.rejected()
-                    if (dragStarted) setPointerColor(android.graphics.Color.CYAN)
-                }
-                PinchAction.MOVE_DRAG -> {
-                    if (dragStarted && YvoraAccessibilityService.dragBusy()) {
-                        val px = (pinchAnchorX + (state.pointerX - pinchStartX) * screenWidth)
-                            .coerceIn(0f, (screenWidth - 1).coerceAtLeast(0).toFloat())
-                        val py = (pinchAnchorY + (state.pointerY - pinchStartY) * screenHeight)
-                            .coerceIn(0f, (screenHeight - 1).coerceAtLeast(0).toFloat())
-                        updatePointer(px / (screenWidth - 1).coerceAtLeast(1), py / (screenHeight - 1).coerceAtLeast(1))
-                        YvoraAccessibilityService.moveDrag(pointerX, pointerY)
-                        showPointer()
-                        val ready = YvoraAccessibilityService.dragReady()
-                        gestureDispatch = if (ready) "Dragging: touch held" else "Hold: waiting for Android"
-                        setPointerColor(if (ready) android.graphics.Color.GREEN else android.graphics.Color.CYAN)
-                    } else {
-                        if (dragStarted) {
-                            gestureDispatch = "Drag interrupted by Android"
-                            DiagnosticCounters.rejected()
+                continue
+            }
+            if(state.isPointerMode && touchArbiter.owner!=i) {
+                cursor.position(state.pointerX,state.pointerY,screenWidth,screenHeight)
+                cursor.color()
+            }
+            cursor.show()
+        }
+
+        // Current owner first, otherwise deterministic slot order. Android dispatchGesture
+        // cancels other streams; second hand remains free to move its cursor, not inject a touch.
+        val owner=touchArbiter.owner
+        val order=if(owner==1) intArrayOf(1,0) else intArrayOf(0,1)
+        for(i in order) {
+            val state=states[i];val cursor=cursors[i]
+            if(!state.handDetected || !cursor.armed) continue
+            if(state.pinchAction!=PinchAction.NONE) {
+                when(state.pinchAction) {
+                    PinchAction.PENDING -> {
+                        if(touchArbiter.owner!=i) {
+                            if(YvoraAccessibilityService.dragBusy() || !touchArbiter.claim(i,now)) {
+                                cursor.armed=false
+                                cursor.recognizer.reset()
+                                continue
+                            }
+                            cursor.anchorX=cursor.x;cursor.anchorY=cursor.y
+                            cursor.startX=state.pointerX;cursor.startY=state.pointerY
                         }
-                        dragStarted = false
+                        cursor.color(android.graphics.Color.CYAN)
                     }
-                }
-                PinchAction.DROP -> {
-                    if (dragStarted) {
-                        gestureDispatch = "Drop requested"
-                        YvoraAccessibilityService.endDrag()
+                    PinchAction.TAP -> if(touchArbiter.owner==i) {
+                        if(state.triggeredTap) {
+                            val ok=YvoraAccessibilityService.performTap(cursor.anchorX,cursor.anchorY)
+                            gestureDispatch=if(ok) "Tap dispatched" else "Tap rejected"
+                            if(!ok) DiagnosticCounters.rejected()
+                        }
+                        touchArbiter.release(i,now)
+                        cursor.color()
                     }
-                    dragStarted = false
-                    pinchPending = false
-                    setPointerColor(android.graphics.Color.TRANSPARENT)
-                }
-                PinchAction.CANCEL -> {
-                    cancelDrag()
-                    setPointerColor(android.graphics.Color.TRANSPARENT)
-                    if (!state.handDetected) {
-                        hidePointer()
-                        pointerX = screenWidth / 2f
-                        pointerY = screenHeight / 2f
+                    PinchAction.START_DRAG -> if(touchArbiter.owner==i) {
+                        DiagnosticCounters.dragStart()
+                        cursor.dragging=YvoraAccessibilityService.beginDrag(cursor.anchorX,cursor.anchorY)
+                        gestureDispatch=if(cursor.dragging) "Hold: waiting for Android" else "Drag rejected"
+                        if(!cursor.dragging) DiagnosticCounters.rejected()
                     }
+                    PinchAction.MOVE_DRAG -> if(touchArbiter.owner==i && cursor.dragging) {
+                        if(YvoraAccessibilityService.dragBusy()) {
+                            val x=cursor.anchorX+(state.pointerX-cursor.startX)*screenWidth
+                            val y=cursor.anchorY+(state.pointerY-cursor.startY)*screenHeight
+                            cursor.position(x/(screenWidth-1).coerceAtLeast(1),y/(screenHeight-1).coerceAtLeast(1),screenWidth,screenHeight)
+                            YvoraAccessibilityService.moveDrag(cursor.x,cursor.y)
+                            val ready=YvoraAccessibilityService.dragReady()
+                            cursor.color(if(ready) android.graphics.Color.GREEN else android.graphics.Color.CYAN)
+                            gestureDispatch=if(ready) "Dragging: touch held" else "Hold: waiting for Android"
+                        } else {
+                            cursor.dragging=false
+                            DiagnosticCounters.rejected()
+                            gestureDispatch="Drag interrupted by Android"
+                        }
+                    }
+                    PinchAction.DROP, PinchAction.CANCEL -> if(touchArbiter.owner==i) {
+                        if(state.pinchAction==PinchAction.DROP) DiagnosticCounters.dragDrop()
+                        if(cursor.dragging) YvoraAccessibilityService.endDrag(cancel=state.pinchAction==PinchAction.CANCEL)
+                        cursor.dragging=false
+                        touchArbiter.release(i,now)
+                        cursor.color()
+                    }
+                    PinchAction.NONE -> Unit
                 }
-                PinchAction.NONE -> Unit
+                continue
             }
-            statusListener?.onStatus(state.handDetected, state.lastGesture,
-                state.isTapPinching, false,
-                state.debugInfo)
-            return
-        }
-
-        // Pointer — only move when in pointer mode (open hand)
-        if (state.handDetected) {
-            if (state.isPointerMode) {
-                updatePointer(state.pointerX, state.pointerY)
-                showPointer()
-                setPointerColor(android.graphics.Color.TRANSPARENT)
-            } else if (state.gestureArmed) {
-                showPointer()
-                val color = when (state.gestureDirection) {
-                    "UP"    -> android.graphics.Color.GREEN
-                    "DOWN"  -> android.graphics.Color.parseColor("#9C27B0")
-                    "LEFT"  -> android.graphics.Color.CYAN
-                    "RIGHT" -> android.graphics.Color.YELLOW
-                    else    -> android.graphics.Color.RED
-                }
-                setPointerColor(color)
-            } else {
-                showPointer()
-                setPointerColor(android.graphics.Color.TRANSPARENT)
+            val direction=state.triggeredGesture
+            if(direction!=null && touchArbiter.owner==null && !YvoraAccessibilityService.dragBusy() && touchArbiter.claim(i,now)) {
+                if(direction=="LEFT" || direction=="RIGHT") DiagnosticCounters.swipe()
+                val ok=YvoraAccessibilityService.performScroll(direction.lowercase())
+                gestureDispatch=if(ok) "$direction dispatched" else "$direction rejected"
+                if(!ok) DiagnosticCounters.rejected()
+                touchArbiter.release(i,now)
+                cursor.color(android.graphics.Color.YELLOW)
+            } else if(state.gestureArmed && touchArbiter.owner!=i) {
+                cursor.color(android.graphics.Color.YELLOW)
             }
-        } else {
-            hidePointer()
-            // Reset pointer position to center so old position doesn't linger
-            pointerX = screenWidth / 2f
-            pointerY = screenHeight / 2f
         }
-
-        // Scroll / navigate gesture — ALL use swipe gestures now
-        if (state.triggeredGesture != null) {
-            when (state.triggeredGesture) {
-                "UP" -> {
-                    gestureDispatch = if (YvoraAccessibilityService.performScroll("up")) "UP dispatched" else "UP rejected: check Accessibility"
-                    Log.d(TAG, "SCROLL UP")
-                }
-                "DOWN" -> {
-                    gestureDispatch = if (YvoraAccessibilityService.performScroll("down")) "DOWN dispatched" else "DOWN rejected: check Accessibility"
-                    Log.d(TAG, "SCROLL DOWN")
-                }
-                "LEFT" -> {
-                    gestureDispatch = if (YvoraAccessibilityService.performScroll("left")) "LEFT dispatched" else "LEFT rejected: check Accessibility"
-                    Log.d(TAG, "SWIPE LEFT")
-                }
-                "RIGHT" -> {
-                    gestureDispatch = if (YvoraAccessibilityService.performScroll("right")) "RIGHT dispatched" else "RIGHT rejected: check Accessibility"
-                    Log.d(TAG, "SWIPE RIGHT")
-                }
-            }
-            if (gestureDispatch.contains("rejected")) DiagnosticCounters.rejected()
-            flashPointer()
-        }
-
-        // UI update
-        statusListener?.onStatus(
-            state.handDetected,
-            state.lastGesture,
-            state.isTapPinching,
-            state.gestureArmed,
-            state.debugInfo
-        )
+        val active=touchArbiter.owner?.let { states[it] } ?: first
+        statusListener?.onStatus(first!=null,active?.lastGesture ?: "None",
+            detected.any { it.isTapPinching },detected.any { it.gestureArmed },
+            "Hands: ${detected.size}/${if(dualHandMode) 2 else 1} | "+detected.joinToString(" / ") { it.debugInfo })
     }
 
     private fun cancelDrag() {
-        YvoraAccessibilityService.endDrag(cancel = true)
-        dragStarted = false
-        pinchPending = false
-    }
-
-    private fun showLShapeIndicator() {
-        mainHandler.post {
-            try {
-                // Change pointer color to blue while drawing L-shape
-                pointerView?.setBackgroundColor(android.graphics.Color.BLUE)
-            } catch (e: Exception) { }
-        }
-    }
-
-    private fun hideLShapeIndicator() {
-        mainHandler.post {
-            try {
-                pointerView?.setBackgroundColor(android.graphics.Color.TRANSPARENT)
-            } catch (e: Exception) { }
-        }
-    }
-
-    // -------------------------------------------------------
-    // POINTER CONTROL
-    // -------------------------------------------------------
-
-    private fun updatePointer(normX: Float, normY: Float) {
-        val targetX = normX.coerceIn(0f, 1f) * (screenWidth - 1).coerceAtLeast(0)
-        val targetY = normY.coerceIn(0f, 1f) * (screenHeight - 1).coerceAtLeast(0)
-
-        val dx = targetX - pointerX
-        val dy = targetY - pointerY
-
-        if (Math.abs(dx) > deadZone || Math.abs(dy) > deadZone) {
-            pointerX = targetX
-            pointerY = targetY
-        }
-
-        val half = 24f * resources.displayMetrics.density
-        val cx = pointerX - half
-        val cy = pointerY - half
-
-        mainHandler.post {
-            try {
-                if (!stopped && isPointerAdded && isPointerVisible) {
-                    val params = pointerParams ?: return@post
-                    val view = pointerView ?: return@post
-                    if (params.x != cx.toInt() || params.y != cy.toInt()) {
-                        params.x = cx.toInt()
-                        params.y = cy.toInt()
-                        windowManager?.updateViewLayout(view, params)
-                    }
-                }
-            } catch (e: Exception) {
-                Log.e(TAG, "Pointer update error: ${e.message}")
-            }
-        }
-    }
-
-    private fun showPointer() {
-        if (!isPointerAdded || isPointerVisible) return
-        mainHandler.post {
-            try {
-                pointerView?.visibility = View.VISIBLE
-                isPointerVisible = true
-            } catch (e: Exception) {
-                Log.e(TAG, "showPointer error: ${e.message}")
-            }
-        }
-    }
-
-    private fun hidePointer() {
-        if (!isPointerAdded || !isPointerVisible) return
-        mainHandler.post {
-            try {
-                pointerView?.visibility = View.GONE
-                isPointerVisible = false
-            } catch (e: Exception) {
-                Log.e(TAG, "hidePointer error: ${e.message}")
-            }
-        }
-    }
-
-    private fun flashPointer() {
-        mainHandler.post {
-            try {
-                pointerView?.alpha = 0.2f
-                mainHandler.postDelayed({
-                    pointerView?.alpha = 1.0f
-                }, 120)
-            } catch (e: Exception) {
-                Log.e(TAG, "flashPointer error: ${e.message}")
-            }
-        }
-    }
-
-    private fun setPointerColor(color: Int) {
-        if (lastPointerColor == color) return
-        mainHandler.post {
-            try {
-                if (stopped || lastPointerColor == color) return@post
-                val inner = pointerView?.findViewById<View>(R.id.innerDot)
-                if (color == android.graphics.Color.TRANSPARENT) {
-                    // Reset to default red
-                    inner?.setBackgroundResource(R.drawable.pointer_inner)
-                } else {
-                    val drawable = android.graphics.drawable.GradientDrawable()
-                    drawable.shape = android.graphics.drawable.GradientDrawable.OVAL
-                    drawable.setColor(color)
-                    inner?.background = drawable
-                }
-                lastPointerColor = color
-            } catch (e: Exception) {
-                Log.e(TAG, "setPointerColor error: ${e.message}")
-            }
-        }
+        YvoraAccessibilityService.endDrag(cancel=true)
+        touchArbiter.reset()
+        cursors.forEach { it.dragging=false }
     }
 
     // -------------------------------------------------------

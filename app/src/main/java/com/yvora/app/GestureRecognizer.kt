@@ -65,6 +65,13 @@ class GestureRecognizer {
     private val pinchDrag = PinchDragEngine(holdMs = 300L, closeThreshold = 0.23f, openThreshold = 0.34f)
     private val geometry = HandPoseGeometry()
     private val knifePose = KnifePoseDetector()
+    private val fuzzyIntent = FuzzyIntentGate()
+    private var assistEnabled=false
+    private var assistThreshold=.61f
+
+    internal fun configureAssist(enabled:Boolean, level:Int) {
+        assistEnabled=enabled;assistThreshold=FuzzyPose.threshold(level);fuzzyIntent.reset()
+    }
     private var lastTapTime    = 0L
 
     // Finger gesture
@@ -96,6 +103,7 @@ class GestureRecognizer {
         horizontalSwipe.reset()
         geometry.reset()
         knifePose.reset()
+        fuzzyIntent.reset()
     }
 
     // -------------------------------------------------------
@@ -106,10 +114,11 @@ class GestureRecognizer {
         result: HandLandmarkerResult,
         imageWidth: Int,
         imageHeight: Int,
-        supportsDrag: Boolean = android.os.Build.VERSION.SDK_INT >= 26
+        supportsDrag: Boolean = android.os.Build.VERSION.SDK_INT >= 26,
+        handIndex: Int = 0
     ): GestureState {
 
-        if (result.landmarks().isEmpty()) {
+        if (handIndex !in result.landmarks().indices) {
             pinchDrag.reset()
             currentGestureDirection = null
             gestureStartTime = 0L
@@ -117,6 +126,7 @@ class GestureRecognizer {
             horizontalSwipe.trackingLost()
             geometry.reset()
             knifePose.reset()
+            fuzzyIntent.reset()
             return GestureState(
                 handDetected = false,
                 pinchAction = PinchAction.CANCEL,
@@ -125,7 +135,7 @@ class GestureRecognizer {
             )
         }
 
-        val landmarks = result.landmarks()[0]
+        val landmarks = result.landmarks()[handIndex]
         val w   = imageWidth.toFloat()
         val h   = imageHeight.toFloat()
         val now = SystemClock.uptimeMillis()
@@ -133,13 +143,7 @@ class GestureRecognizer {
         // --- Handedness ---
         // MediaPipe returns handedness from camera perspective
         // Since we flip the image, "Left" from MediaPipe = user's Left hand
-        val handedness = if (result.handednesses().isNotEmpty() &&
-            result.handednesses()[0].isNotEmpty()
-        ) {
-            result.handednesses()[0][0].categoryName() ?: "Unknown"
-        } else {
-            "Unknown"
-        }
+        val handedness = result.handednesses().getOrNull(handIndex)?.firstOrNull()?.categoryName() ?: "Unknown"
 
         // --- Pointer position ---
         val rawPX = (landmarks[0].x() + landmarks[5].x() + landmarks[9].x() +
@@ -164,7 +168,7 @@ class GestureRecognizer {
 
         // MediaPipe world landmarks provide depth without another model.
         // Fall back to aspect-corrected image landmarks if depth output is absent.
-        val world = result.worldLandmarks().firstOrNull()
+        val world = result.worldLandmarks().getOrNull(handIndex)
         for (i in 0..20) {
             if (world != null && world.size == 21) {
                 val pt = world[i]
@@ -177,8 +181,11 @@ class GestureRecognizer {
         val edgePose = knifePose.update()
         val tapDist = geometry.pinchRatio()
         val ownedBefore = pinchDrag.ownsPinch
-        val swipePose = edgePose && !ownedBefore
-        // Do not count three fingers; only an edge-on, extended hand arms the swipe.
+        // Opt-in local fuzzy interpretation tolerates partially extended/rotated poses.
+        // A close pinch and the normal face-on pointer are not treated as assisted swipes.
+        val relaxed=fuzzyIntent.update(assistEnabled,knifePose.relaxedScore,assistThreshold,!ownedBefore && tapDist>=.34f)
+        val swipePose = (edgePose || relaxed) && !ownedBefore
+        // The same temporal motion gate and one-shot latch still apply.
         val swipe = if (ownedBefore) null else horizontalSwipe.updatePose(swipePose, rawPX, rawPY, now,
             geometry.palmSize() / w, h / w)
         val blocksOther = !ownedBefore && (knifePose.candidate || swipePose || horizontalSwipe.blocksOtherGestures)
@@ -281,7 +288,7 @@ class GestureRecognizer {
         }
 
         val debugInfo = "$displayHand hand | Fingers: $fingerStr ($totalUp) | " +
-                "${if (swipePose) "Knife hand: swipe ready" else if (gestureArmed) "Armed: $gestureDirection" else "Idle"} | Edge: ${(knifePose.edgeScore * 100).toInt()}% | Pinch: ${(tapDist * 100).toInt()}%"
+                "${if (swipePose) "Knife hand: swipe ready" else if (gestureArmed) "Armed: $gestureDirection" else "Idle"} | Assist: ${if(assistEnabled) (knifePose.relaxedScore*100).toInt().toString()+"%" else "Off"} | Edge: ${(knifePose.edgeScore * 100).toInt()}% | Pinch: ${(tapDist * 100).toInt()}%"
 
         return GestureState(
             handDetected     = true,

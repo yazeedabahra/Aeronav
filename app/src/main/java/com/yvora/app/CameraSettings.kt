@@ -24,6 +24,15 @@ internal object CameraSettings {
         )
     }
 
+    fun readAssist(context:Context):Boolean = prefs(context).getBoolean("assist_intent",false)
+    fun saveAssist(context:Context,enabled:Boolean) { prefs(context).edit().putBoolean("assist_intent",enabled).apply() }
+    fun readAssistLevel(context:Context):Int = prefs(context).getInt("assist_level",0).coerceIn(-1,1)
+    fun saveAssistLevel(context:Context,level:Int) { prefs(context).edit().putInt("assist_level",level.coerceIn(-1,1)).apply() }
+
+    fun readDualHand(context: Context): Boolean = prefs(context).getBoolean("dual_hand", true)
+
+    fun saveDualHand(context: Context, enabled:Boolean) { prefs(context).edit().putBoolean("dual_hand",enabled).apply() }
+
     fun readDetail(context: Context): CameraDetail =
         if (prefs(context).getBoolean("distance", false)) CameraDetail.DISTANCE else CameraDetail.AUTO
 

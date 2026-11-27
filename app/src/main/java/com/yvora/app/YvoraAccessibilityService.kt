@@ -14,37 +14,49 @@ class YvoraAccessibilityService : AccessibilityService() {
         var instance: YvoraAccessibilityService? = null
 
         fun performScroll(direction: String): Boolean {
+            if(aiActive()) return false
             return instance?.doScroll(direction) ?: false
         }
 
         fun performTap(x: Float, y: Float): Boolean {
+            if(aiActive()) return false
             return instance?.doTap(x, y) ?: false
         }
 
         fun performBack(): Boolean {
+            if(aiActive()) return false
             return instance?.doBack() ?: false
         }
 
         fun isEnabled() = instance != null
-        internal fun beginDrag(x: Float, y: Float): Boolean = instance?.drag?.start(x, y) ?: false
+        internal fun beginDrag(x: Float, y: Float): Boolean = !aiActive() && instance?.drag?.start(x, y) == true
         internal fun moveDrag(x: Float, y: Float) { instance?.drag?.move(x, y) }
         internal fun endDrag(cancel: Boolean = false) { instance?.drag?.finish(cancel) }
         internal fun dragBusy(): Boolean = instance?.drag?.busy == true
         internal fun dragReady(): Boolean = instance?.drag?.ready == true
+        internal fun prepareAiPlan(actions:List<AiAction>):Boolean = instance?.aiSession?.prepare(actions) == true
+        internal fun aiActive():Boolean = instance?.aiSession?.active == true
+        internal fun aiRunning():Boolean = instance?.aiSession?.running == true
+        internal fun stopAi(message:String?=null) { instance?.aiSession?.cancel(message) }
     }
 
     private var drag: ContinuousDrag? = null
+    private var aiSession: AiActionSession? = null
 
     override fun onServiceConnected() {
         if (Build.VERSION.SDK_INT >= 26) drag = ContinuousDrag(this)
+        aiSession?.cancel()
+        aiSession=AiActionSession(this)
         instance = this
         Log.d(TAG, "Accessibility service connected")
     }
 
     override fun onAccessibilityEvent(event: AccessibilityEvent?) {}
-    override fun onInterrupt() { drag?.finish(true) }
+    override fun onInterrupt() { aiSession?.cancel();drag?.finish(true) }
 
     override fun onDestroy() {
+        aiSession?.cancel()
+        aiSession=null
         drag?.disconnected()
         drag = null
         super.onDestroy()
@@ -57,7 +69,7 @@ class YvoraAccessibilityService : AccessibilityService() {
     // YouTube Shorts, TikTok, home screen, everything
     // -------------------------------------------------------
 
-    fun doScroll(direction: String): Boolean {
+    fun doScroll(direction: String, completed: ((Boolean)->Unit)? = null): Boolean {
         if (drag?.busy == true) return false
         val metrics = resources.displayMetrics
         val screenW = metrics.widthPixels.toFloat()
@@ -109,9 +121,11 @@ class YvoraAccessibilityService : AccessibilityService() {
         return dispatchGesture(gesture, object : GestureResultCallback() {
             override fun onCompleted(g: GestureDescription?) {
                 Log.d(TAG, "Scroll $direction completed")
+                completed?.invoke(true)
             }
             override fun onCancelled(g: GestureDescription?) {
                 Log.d(TAG, "Scroll $direction cancelled")
+                completed?.invoke(false)
             }
         }, null)
     }

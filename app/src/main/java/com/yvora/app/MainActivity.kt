@@ -118,6 +118,25 @@ class MainActivity : AppCompatActivity() {
         bindViews()
         setupButtons()
         setupCalibration()
+        findViewById<Switch>(R.id.switchDualHand).apply {
+            isChecked=CameraSettings.readDualHand(this@MainActivity)
+            setOnCheckedChangeListener { _, enabled -> CameraSettings.saveDualHand(this@MainActivity,enabled) }
+        }
+        findViewById<Switch>(R.id.switchAssistIntent).apply {
+            isChecked=CameraSettings.readAssist(this@MainActivity)
+            setOnCheckedChangeListener { _,enabled -> CameraSettings.saveAssist(this@MainActivity,enabled) }
+        }
+        findViewById<android.widget.Spinner>(R.id.spinnerAssistLevel).apply {
+            adapter=android.widget.ArrayAdapter(this@MainActivity,android.R.layout.simple_spinner_dropdown_item,
+                listOf("Fewer false swipes","Balanced","More flexible swipes"))
+            setSelection(CameraSettings.readAssistLevel(this@MainActivity)+1)
+            onItemSelectedListener=object:android.widget.AdapterView.OnItemSelectedListener {
+                override fun onNothingSelected(parent:android.widget.AdapterView<*>?) {}
+                override fun onItemSelected(parent:android.widget.AdapterView<*>?,view:android.view.View?,position:Int,id:Long) {
+                    CameraSettings.saveAssistLevel(this@MainActivity,position-1)
+                }
+            }
+        }
         findViewById<Button>(R.id.btnAiCore).setOnClickListener { startActivity(Intent(this, AiLabActivity::class.java)) }
         requestPermissions()
     }
