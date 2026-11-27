@@ -34,8 +34,10 @@ internal class AdaptivePointerFilter {
     private var rawX = 0.5f
     private var rawY = 0.5f
     private var previousTime = -1L
+    var tauSeconds=.095f
+        private set
 
-    fun reset() { previousTime = -1L; x = 0.5f; y = 0.5f }
+    fun reset() { previousTime = -1L; x = 0.5f; y = 0.5f; tauSeconds=.095f }
 
     fun update(inputX: Float, inputY: Float, timeMs: Long) {
         if (!inputX.isFinite() || !inputY.isFinite()) return
@@ -48,8 +50,8 @@ internal class AdaptivePointerFilter {
         val dt = ((timeMs - previousTime).coerceIn(1L, 250L)) / 1000f
         val speed = hypot(nx - rawX, ny - rawY) / dt
         // Linear fuzzy membership for rapid motion (0 = slow, 1 = fast).
-        val fast = ((speed - 0.04f) / 0.96f).coerceIn(0f, 1f)
-        val tau = 0.095f * (1f - fast) + 0.018f * fast
+        val tau=FuzzyControllers.cursorTau(speed)
+        tauSeconds=tau
         val alpha = dt / (tau + dt)
         x += alpha * (nx - x)
         y += alpha * (ny - y)

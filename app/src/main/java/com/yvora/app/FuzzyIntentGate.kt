@@ -9,12 +9,10 @@ import kotlin.math.min
  */
 internal object FuzzyPose {
     fun rise(x:Float, low:Float, high:Float):Float =
-        if(x.isFinite()) ((x-low)/(high-low)).coerceIn(0f,1f) else 0f
-    fun score(edge:Float, extension:Float, spread:Float):Float = minOf(
-        rise(edge,0.24f,0.80f),
-        rise(extension,1.35f,3.15f),
-        1f-rise(spread,1.15f,2.0f)
-    )
+        FuzzyCore.rise(x,low,high)
+    fun score(edge:Float, extension:Float, spread:Float):Float =
+        if(!edge.isFinite() || !extension.isFinite() || !spread.isFinite()) 0f else
+        FuzzyCore.and(FuzzyCore.and(rise(edge,.24f,.80f),rise(extension,1.35f,3.15f)),FuzzyCore.fall(spread,1.15f,2.0f))
     fun threshold(level:Int):Float = when(level.coerceIn(-1,1)) { -1 -> .72f;1 -> .50f;else -> .61f }
 }
 internal class FuzzyIntentGate {

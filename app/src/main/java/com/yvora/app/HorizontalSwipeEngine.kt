@@ -14,10 +14,13 @@ internal class HorizontalSwipeEngine {
     private var lastSampleTime = -1L
     private var latched = false
     private var releaseSamples = 0
+    var lastMembership=0f
+        private set
     var blocksOtherGestures = false
         private set
 
     fun reset() {
+        lastMembership=0f
         anchorTime = -1L
         lastSampleTime = -1L
         latched = false
@@ -26,6 +29,7 @@ internal class HorizontalSwipeEngine {
     }
 
     fun trackingLost() {
+        lastMembership=0f
         anchorTime = -1L
         lastSampleTime = -1L
         releaseSamples = 0
@@ -33,7 +37,7 @@ internal class HorizontalSwipeEngine {
     }
 
     private fun membership(value: Float, low: Float, high: Float): Float =
-        ((value - low) / (high - low)).coerceIn(0f, 1f)
+        FuzzyCore.rise(value,low,high)
 
     // Legacy count-based entry retained only for existing motion regression tests.
     fun update(fingers: Int, x: Float, y: Float, nowMs: Long, palmWidth: Float = 0.20f, aspect: Float = 1f): String? =
@@ -45,6 +49,7 @@ internal class HorizontalSwipeEngine {
             return null
         }
         if (!armed) {
+            lastMembership=0f
             if (blocksOtherGestures) {
                 releaseSamples++
                 if (releaseSamples >= 2) {
@@ -62,6 +67,7 @@ internal class HorizontalSwipeEngine {
 
         if (anchorTime < 0 || nowMs <= lastSampleTime ||
             nowMs - lastSampleTime > 450L || nowMs - anchorTime > 1400L) {
+            lastMembership=0f
             anchorX = x
             anchorY = y
             anchorTime = nowMs
@@ -79,12 +85,9 @@ internal class HorizontalSwipeEngine {
         val relativeTravel = travel / scale
         val speed = relativeTravel * 1000f / elapsed
         val horizontal = travel / (travel + abs(dy) + 0.0001f)
-        val confidence = minOf(
-            membership(relativeTravel, 0.12f, 0.37f),
-            membership(speed, 0.18f, 0.85f),
-            membership(horizontal, 0.52f, 0.77f)
-        )
-        if (travel < 0.018f || confidence < 0.55f) return null
+        val confidence=FuzzyCore.and(FuzzyCore.and(membership(relativeTravel,.12f,.37f),membership(speed,.18f,.85f)),membership(horizontal,.52f,.77f))
+        lastMembership=confidence
+        if(travel < .018f || !FuzzyCore.alphaCut(confidence,.55f)) return null
         latched = true
         anchorTime = -1L
         return if (dx > 0f) "RIGHT" else "LEFT"

@@ -156,6 +156,25 @@ class YvoraService : LifecycleService() {
 
     // These methods are called only on the main thread.
     private var ranges=HandRanges()
+    private var fuzzyTraces=Array(2){FuzzyHandTrace()}
+    private var lastFuzzyAt=-1L
+    internal fun fuzzyTrace(slot:Int):FuzzyHandTrace =
+        if(cameraRunning && lastFuzzyAt>=0 && SystemClock.uptimeMillis()-lastFuzzyAt<=750L) fuzzyTraces[slot] else FuzzyHandTrace()
+    internal fun fuzzyThermal():Float=thermalPolicy.fuzzyHeat
+    internal fun fuzzyInterval():Long=analysisIntervalMs
+    private fun clearFuzzyTraces() { lastFuzzyAt=-1L;fuzzyTraces=Array(2){FuzzyHandTrace()} }
+    private val trackingWatchdog=object:Runnable {
+        override fun run() {
+            if(stopped) return
+            if(cameraRunning && lastFuzzyAt>=0 && SystemClock.uptimeMillis()-lastFuzzyAt>750L) {
+                clearFuzzyTraces();forceHidePointer()
+                sampleX=Float.NaN;sampleY=Float.NaN
+                sampleXs.fill(Float.NaN);sampleYs.fill(Float.NaN);cancelRangeCapture();clearFuzzyTraces()
+                statusListener?.onStatus(false,"Tracking timed out",false,false,"Open palm to re-arm")
+            }
+            mainHandler.postDelayed(this,150L)
+        }
+    }
     private val sampleXs=FloatArray(2){Float.NaN}
     private val sampleYs=FloatArray(2){Float.NaN}
     private var capture:RangeCapture?=null
@@ -265,6 +284,7 @@ class YvoraService : LifecycleService() {
                 setupOverlayWindows()
                 forceHidePointer()
                 registerPowerMonitoring()
+                mainHandler.post(trackingWatchdog)
                 cameraExecutor.execute {
                     if (!stopped) initMediaPipe()
                     val ready = handLandmarker != null
@@ -431,7 +451,7 @@ class YvoraService : LifecycleService() {
         thermalPolicy.observe(SystemClock.uptimeMillis(), false, 0f, 0f, 0, false)
         sampleX = Float.NaN
         sampleY = Float.NaN
-        sampleXs.fill(Float.NaN);sampleYs.fill(Float.NaN);cancelRangeCapture()
+        sampleXs.fill(Float.NaN);sampleYs.fill(Float.NaN);cancelRangeCapture();clearFuzzyTraces()
         resultRate = 0f
         frameAgeMs = -1L
         rateWindowStart = -1L
@@ -551,7 +571,7 @@ class YvoraService : LifecycleService() {
                                 forceHidePointer()
                                 sampleX = Float.NaN
                                 sampleY = Float.NaN
-                                sampleXs.fill(Float.NaN);sampleYs.fill(Float.NaN);cancelRangeCapture()
+                                sampleXs.fill(Float.NaN);sampleYs.fill(Float.NaN);cancelRangeCapture();clearFuzzyTraces()
                                 statusListener?.onStatus(false, "None", false, false, "")
                             }
                         }
@@ -579,8 +599,10 @@ class YvoraService : LifecycleService() {
         }
         val assignment=HandSlots.assign(labels)
         val states=cursors.mapIndexed { slot,cursor ->
-            cursor.recognizer.processResult(result,width,height,handIndex=assignment[slot])
+            cursor.recognizer.processResult(result,width,height,handIndex=assignment[slot],frameAgeMs=frameAgeMs)
         }
+        fuzzyTraces=Array(2){ cursors[it].recognizer.fuzzyTrace }
+        lastFuzzyAt=now
         val detected=states.filter { it.handDetected }
         val first=detected.firstOrNull()
         DiagnosticCounters.result(first!=null,frameAgeMs)

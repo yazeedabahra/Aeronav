@@ -8,6 +8,8 @@ internal class ThermalPolicy(private val lowRam: Boolean) {
         private set
     var warm = false
         private set
+    var fuzzyHeat=0f
+        private set
     private var recoverySince = -1L
     private var lastActivity = -1L
     private var lastX = Float.NaN
@@ -32,6 +34,7 @@ internal class ThermalPolicy(private val lowRam: Boolean) {
             }
         }
         warm = severity >= 2 || powerSave || (batteryTenths != null && batteryTenths >= 400)
+        fuzzyHeat=FuzzyControllers.heatDegree(batteryTenths,severity)
     }
 
     fun observe(now: Long, detected: Boolean, x: Float, y: Float, fingers: Int, gesture: Boolean) {
@@ -51,13 +54,14 @@ internal class ThermalPolicy(private val lowRam: Boolean) {
     }
 
     fun interval(now: Long): Long {
-        if (!hand) return if (warm) 320L else 250L
-        val active = lastActivity >= 0L && now - lastActivity <= 700L
-        return when {
+        val active=lastActivity>=0L && now-lastActivity<=700L
+        val base=when {
+            !hand -> if(warm) 320L else 250L
             warm && active -> 150L
             warm -> 220L
-            active -> if (lowRam) 110L else 90L
+            active -> if(lowRam) 110L else 90L
             else -> 160L
         }
+        return FuzzyControllers.thermalInterval(base,fuzzyHeat,warm)
     }
 }
