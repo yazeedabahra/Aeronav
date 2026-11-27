@@ -31,11 +31,12 @@ internal class FuzzyHandIdentity {
             val continuity=if(ownDist==null) 1f else FuzzyCore.fall(ownDist,.10f,.42f)
             scores[i]=FuzzyCore.and(labelDegree,continuity)
             // A closer opposing track is a veto, never a reason to transfer a touch.
-            if(ownDist!=null && otherDist!=null && ownDist>.13f && ownDist-otherDist>.09f ||
-                ownDist!=null && ownDist>.42f) ambiguous=true
+            if((ownDist!=null && otherDist!=null && ownDist>.13f && ownDist-otherDist>.09f) ||
+                (ownDist!=null && ownDist>.42f) ||
+                (ownDist==null && otherDist!=null && otherDist<.085f)) ambiguous=true
         }
         // Reject both during overlapping palms with two established tracks: preserve identities.
-        if(indices.all{it>=0} && tracks.all{it!=null}) {
+        if(indices.all{it>=0}) {
             val a=hands[indices[0]];val b=hands[indices[1]]
             if(hypot(a.x-b.x,a.y-b.y)<.065f) ambiguous=true
         }
@@ -44,8 +45,8 @@ internal class FuzzyHandIdentity {
             val j=indices[i];if(j<0) continue
             val o=hands[j];val old=tracks[i]
             val dt=if(old==null) 0f else (now-old.time)/1000f
-            val vx=if(old!=null && dt in .025f.. .35f) ((o.x-old.x)/dt).coerceIn(-2f,2f) else 0f
-            val vy=if(old!=null && dt in .025f.. .35f) ((o.y-old.y)/dt).coerceIn(-2f,2f) else 0f
+            val vx=if(old!=null && dt in 0.025f..0.35f) ((o.x-old.x)/dt).coerceIn(-2f,2f) else 0f
+            val vy=if(old!=null && dt in 0.025f..0.35f) ((o.y-old.y)/dt).coerceIn(-2f,2f) else 0f
             tracks[i]=Track(o.x,o.y,vx,vy,now)
         }
         return IdentityResult(indices,scores,false)
@@ -62,7 +63,7 @@ internal class FuzzyMotionPredictor {
     fun update(nx:Float,ny:Float,now:Long,age:Long,quality:Float):CursorPrediction {
         if(!nx.isFinite() || !ny.isFinite()) { reset();return CursorPrediction(.5f,.5f) }
         val dt=(now-time)/1000f
-        if(time<0 || dt !in .025f.. .35f) {
+        if(time<0 || dt !in 0.025f..0.35f) {
             x=nx;y=ny;time=now;vx=0f;vy=0f
             return CursorPrediction(nx,ny)
         }

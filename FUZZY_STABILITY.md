@@ -1,0 +1,8 @@
+# Fuzzy stability and precision — 1.7.1-dev
+
+Includes PR #10 (independent calibration) and PR #11 (central fuzzy core), both previously CI-tested. 
+- FuzzyHandIdentity checks high-enough handedness label, raw palm centroid continuity and short bounded velocity projection. Cross-label suspicious distances, overlapping palms and duplicate labels cause both slots to abstain. Identity history expires after 600 ms; a new open palm is required to resume input after loss. This is conservative temporal association, not a guaranteed biometric identity tracker.
+- FuzzyMotionPredictor uses speed, velocity-direction agreement, tracking membership and frame freshness. Maximum lead 1.2% of normalized screen extent, up to 65 ms nominal horizon; no extrapolated touch events, no drag extrapolation. A subsequent pinch begins at the last displayed cursor position. Discontinuities, reversal and stale results reduce/reset prediction.
+- FuzzyConflict preserves current touch owner, gives an isolated new pinch precedence over a concurrent swipe, and requires sufficient score and separation for two same-category actions. Ambiguous simultaneous commands are suppressed and require open-palm rearming. Single accepted actions retain prior behavior; Android touch ownership is still single-stream.
+- Fuzzy Lab shows identity and prediction memberships in safe calibration mode (touch arbitration disabled). Unit tests cover label swaps, order changes, overlap, bounded prediction, reversal and conflicts.
+- No new camera or cloud requests, no AI-key changes. Device tests needed for crossing hands, false rejection, pointer responsiveness, heat and actual Android touch execution. Adaptive learning, fuzzy AI routing, custom gesture learning and true multi-touch remain future stages.

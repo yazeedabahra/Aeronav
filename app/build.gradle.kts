@@ -11,8 +11,8 @@ android {
         applicationId = "com.yvora.app"
         minSdk = 24
         targetSdk = 35
-        versionCode = 10
-        versionName = "1.7-dev"
+        versionCode = 11
+        versionName = "1.7.1-dev"
 
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
     }

@@ -710,7 +710,7 @@ class YvoraService : LifecycleService() {
             cursor.show()
         }
 
-        // Current owner first, otherwise deterministic slot order. Android dispatchGesture
+        // Current owner first, otherwise choose unambiguous fuzzy candidate. Android dispatchGesture
         // cancels other streams; second hand remains free to move its cursor, not inject a touch.
         val owner=touchArbiter.owner
         val candidates=(0..1).mapNotNull { i ->
