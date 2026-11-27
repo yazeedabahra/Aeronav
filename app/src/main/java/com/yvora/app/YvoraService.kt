@@ -957,18 +957,18 @@ class YvoraService : LifecycleService() {
 
         return if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
             Notification.Builder(this, CHANNEL_ID)
-                .setContentTitle("Yvora Running")
-                .setContentText(pauseReason ?: "Hand gesture navigation active")
+                .setContentTitle(tr("Yvora Running","Yvora يعمل"))
+                .setContentText(pauseReason ?: tr("Hand gesture navigation active","التنقل بإيماءات اليد نشط"))
                 .setSmallIcon(android.R.drawable.ic_menu_camera)
                 .setContentIntent(openPending)
-                .addAction(android.R.drawable.ic_delete, "Stop", stopPending)
+                .addAction(android.R.drawable.ic_delete, tr("Stop","إيقاف"), stopPending)
                 .setOngoing(true)
                 .build()
         } else {
             @Suppress("DEPRECATION")
             Notification.Builder(this)
-                .setContentTitle("Yvora Running")
-                .setContentText(pauseReason ?: "Hand gestures active")
+                .setContentTitle(tr("Yvora Running","Yvora يعمل"))
+                .setContentText(pauseReason ?: tr("Hand gestures active","إيماءات اليد نشطة"))
                 .setSmallIcon(android.R.drawable.ic_menu_camera)
                 .setContentIntent(openPending)
                 .setOngoing(true)
@@ -980,7 +980,7 @@ class YvoraService : LifecycleService() {
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
             val channel = NotificationChannel(
                 CHANNEL_ID,
-                "Yvora Service",
+                tr("Yvora Service","خدمة Yvora"),
                 NotificationManager.IMPORTANCE_LOW
             ).apply { setShowBadge(false) }
             getSystemService(NotificationManager::class.java)

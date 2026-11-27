@@ -28,21 +28,21 @@ class FuzzyLabActivity: LocalizedActivity() {
             val engine=YvoraService.instance
             live.text=if(engine==null) tr("Engine stopped. Start Yvora to see live degrees.","المحرك متوقف. شغّل Yvora لرؤية درجات الانتماء.")
                 else buildString {
-                    append("Thermal membership: "+fmt(engine.fuzzyThermal())+" | analysis target: "+engine.fuzzyInterval()+" ms\n")
-                    append("Configured control mode: "+engine.transformModeName()+"\n")
-                    append("Identity: "+if(engine.identityUncertain()) "ambiguous" else "no ambiguity detected")
-                    append("\nTouch arbitration and zoom injection disabled during safe lab mode.\n")
+                    append(tr("Thermal membership: ","انتماء الحرارة: ")+fmt(engine.fuzzyThermal())+tr(" | analysis target: "," | معدل المعالجة المستهدف: ")+engine.fuzzyInterval()+" ms\n")
+                    append(tr("Configured control mode: ","وضع التحكم المحدد: ")+uiStatus(engine.transformModeName())+"\n")
+                    append(tr("Identity: ","هوية اليد: ")+if(engine.identityUncertain()) tr("ambiguous","ملتبسة") else tr("no ambiguity detected","لا يوجد التباس مرصود"))
+                    append(tr("\nTouch arbitration and zoom injection disabled during safe lab mode.\n","\nتتوقف أوامر اللمس والتكبير أثناء المعايرة الآمنة.\n"))
                     for(slot in 0..1) {
                         val tr=engine.fuzzyTrace(slot)
-                        append(if(slot==0) "\nLEFT (cyan)" else "\nRIGHT (amber)")
-                        if(!tr.present) { append(": no fresh hand result\n");continue }
-                        append("\nHandedness score: "+fmt(tr.label)+" | quality: "+fmt(tr.quality))
-                        append("\nIdentity membership: "+fmt(engine.identityDegree(slot))+" | prediction membership: "+fmt(engine.predictionDegree(slot)))
-                        append("\nRelaxed pose: "+fmt(tr.pose)+" | assisted rule: "+fmt(tr.assisted))
-                        append("\nPersonal pose membership: "+fmt(tr.personal))
-                        append("\nHorizontal motion: "+fmt(tr.swipe)+" | alpha: "+fmt(tr.threshold))
-                        append("\nCandidate: "+tr.candidate+" | assist: "+if(tr.enabled) "on" else "off")
-                        append("\nCursor smoothing tau: "+fmt(tr.tau*1000f)+" ms\n")
+                        append(if(slot==0) tr("\nLEFT (cyan)","\nاليسرى (سماوي)") else tr("\nRIGHT (amber)","\nاليمنى (كهرماني)"))
+                        if(!tr.present) { append(tr(": no fresh hand result\n",": لا توجد نتيجة حديثة\n"));continue }
+                        append(tr("\nHandedness score: ","\nدرجة تصنيف اليد: ")+fmt(tr.label)+tr(" | quality: "," | الجودة: ")+fmt(tr.quality))
+                        append(tr("\nIdentity membership: ","\nانتماء الهوية: ")+fmt(engine.identityDegree(slot))+tr(" | prediction membership: "," | انتماء التوقع: ")+fmt(engine.predictionDegree(slot)))
+                        append(tr("\nRelaxed pose: ","\nالوضعية المرنة: ")+fmt(tr.pose)+tr(" | assisted rule: "," | القاعدة المساعدة: ")+fmt(tr.assisted))
+                        append(tr("\nPersonal pose membership: ","\nانتماء الوضعية الشخصية: ")+fmt(tr.personal))
+                        append(tr("\nHorizontal motion: ","\nالحركة الأفقية: ")+fmt(tr.swipe)+tr(" | alpha: "," | ألفا: ")+fmt(tr.threshold))
+                        append(tr("\nCandidate: ","\nالأمر المرشح: ")+uiStatus(tr.candidate)+tr(" | assist: "," | المساعدة: ")+if(tr.enabled) tr("on","مفعّل") else tr("off","متوقف"))
+                        append(tr("\nCursor smoothing tau: ","\nمعامل تنعيم المؤشر تاو: ")+fmt(tr.tau*1000f)+" ms\n")
                     }
                 }
             handler.postDelayed(this,300L)
@@ -108,14 +108,14 @@ class FuzzyLabActivity: LocalizedActivity() {
         val dmLeft=FuzzyCore.not(and)
         val dmRight=FuzzyCore.or(FuzzyCore.not(a),FuzzyCore.not(b),s)
         simulation.text=buildString {
-            append("AND = "+fmt(and)+" | OR = "+fmt(or)+"\nNOT A = "+fmt(FuzzyCore.not(a)))
-            append("\nAlpha cut (AND): "+if(FuzzyCore.alphaCut(and,alpha)) tr("accepted in sandbox","مقبول في المختبر") else tr("rejected in sandbox","مرفوض في المختبر"))
-            append("\nDe Morgan: "+fmt(dmLeft)+" vs "+fmt(dmRight)+" | "+if(kotlin.math.abs(dmLeft-dmRight)<.0001f) tr("equal for these inputs","متساويان لهذه المدخلات") else tr("not equal for this operator pair","غير متساويين لهذا الزوج من العمليات"))
-            append("\n\nMax-min: [A,B] ○ [[.9,.2],[.4,.8]]")
-            append("\nOutput = ["+fmt(composed[0])+", "+fmt(composed[1])+"] | Height = "+fmt(FuzzyCore.height(composed)))
-            append("\n\nSlow / medium / fast: "+deg.joinToString(" / "){fmt(it)})
+            append(tr("AND = ","التقاطع AND = ")+fmt(and)+tr(" | OR = "," | الاتحاد OR = ")+fmt(or)+tr("\nNOT A = ","\nمتممة A = ")+fmt(FuzzyCore.not(a)))
+            append(tr("\nAlpha cut (AND): ","\nقطع ألفا للتقاطع: ")+if(FuzzyCore.alphaCut(and,alpha)) tr("accepted in sandbox","مقبول في المختبر") else tr("rejected in sandbox","مرفوض في المختبر"))
+            append(tr("\nDe Morgan: ","\nدي مورغان: ")+fmt(dmLeft)+" vs "+fmt(dmRight)+" | "+if(kotlin.math.abs(dmLeft-dmRight)<.0001f) tr("equal for these inputs","متساويان لهذه المدخلات") else tr("not equal for this operator pair","غير متساويين لهذا الزوج من العمليات"))
+            append(tr("\n\nMax-min: [A,B] ○ [[.9,.2],[.4,.8]]","\n\nتركيب Max-Min: [A,B] ○ [[.9,.2],[.4,.8]]"))
+            append(tr("\nOutput = [","\nالناتج = [")+fmt(composed[0])+", "+fmt(composed[1])+tr("] | Height = ","] | الارتفاع = ")+fmt(FuzzyCore.height(composed)))
+            append(tr("\n\nSlow / medium / fast: ","\n\nبطيء / متوسط / سريع: ")+deg.joinToString(" / "){fmt(it)})
             append("\nSugeno: "+fmt(sug)+" | Mamdani: "+fmt(mam))
-            append("\nRuntime cursor tau for example speed: "+fmt(FuzzyControllers.cursorTau(speed)*1000f)+" ms")
+            append(tr("\nRuntime cursor tau for example speed: ","\nمعامل تنعيم المؤشر عند سرعة المثال: ")+fmt(FuzzyControllers.cursorTau(speed)*1000f)+" ms")
         }
         graph.speed=speed;graph.invalidate()
     }

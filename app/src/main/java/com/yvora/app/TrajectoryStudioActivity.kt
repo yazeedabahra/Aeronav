@@ -22,7 +22,7 @@ class TrajectoryStudioActivity: LocalizedActivity() {
     private fun refresh(){
         val templates=CameraSettings.readMotions(this,slot())
         saved.text=if(templates.isEmpty()) tr("No saved trajectories for this hand.","لا توجد مسارات محفوظة لهذه اليد.")
-            else "Saved commands: "+templates.keys.joinToString{it.name}
+            else tr("Saved commands: ","الأوامر المحفوظة: ")+templates.keys.joinToString{uiStatus(it.name)}
     }
     private fun cancel(){
         engine?.cancelMotionTraining();capturing=false
@@ -36,7 +36,7 @@ class TrajectoryStudioActivity: LocalizedActivity() {
                     cancel();info.text=tr("Capture interrupted or expired.","انقطع التسجيل أو انتهت مهلته.")
                 } else {
                     val count=e.motionTrainingCount()
-                    info.text="Examples: $count/3\n"+e.motionTrainingStatus()
+                    info.text=tr("Examples: $count/3\n","الأمثلة: $count/3\n")+uiStatus(e.motionTrainingStatus())
                     if(count==3) start.text=tr("Review and save template","مراجعة وحفظ النموذج")
                 }
             } else if(e==null || e!==YvoraService.instance) info.text=tr("Start the tracking engine first.","شغّل محرك التتبع أولًا.")
@@ -53,7 +53,7 @@ class TrajectoryStudioActivity: LocalizedActivity() {
         label(tr("CUSTOM TRAJECTORY STUDIO","استوديو المسارات المخصصة"),24f)
         label("Choose a swipe command. Open your selected palm, pinch thumb and index, draw a path for 0.4–2.5 seconds, then release. Repeat three times. No gestures execute during recording.")
         label(tr("Training hand","يد التدريب"));hand=spinner(listOf(tr("Left (cyan)","اليسرى (سماوي)"),tr("Right (amber)","اليمنى (كهرماني)")))
-        label(tr("Assigned command","الأمر المرتبط"));command=spinner(trajectoryActions.map{it.name})
+        label(tr("Assigned command","الأمر المرتبط"));command=spinner(trajectoryActions.map{uiStatus(it.name)})
         saved=label("");info=label(tr("Ready","جاهز"))
         start=Button(this).apply{text=tr("Start recording 3 examples","بدء تسجيل ثلاثة أمثلة");panel.addView(this)}
         val stop=Button(this).apply{text=tr("Cancel recording","إلغاء التسجيل");panel.addView(this)}
@@ -88,8 +88,8 @@ class TrajectoryStudioActivity: LocalizedActivity() {
                 if(others.values.any{MotionSimilarity.degree(pattern,it)>=.65f}){
                     info.text=tr("Too similar to another saved command. Choose a more distinct path.","المسار مشابه جدًا لأمر محفوظ آخر. اختر مسارًا أكثر تميزًا.");return@setOnClickListener
                 }
-                androidx.appcompat.app.AlertDialog.Builder(this).setTitle("Save ${assigned.name} trajectory?")
-                    .setMessage("Three consistent examples. Mean duration ${pattern.duration} ms. Replaces this hand's template for this command. Restart engine after saving.")
+                androidx.appcompat.app.AlertDialog.Builder(this).setTitle(tr("Save ${assigned.name} trajectory?","حفظ مسار ${uiStatus(assigned.name)}؟"))
+                    .setMessage(tr("Three consistent examples. Mean duration ${pattern.duration} ms. Replaces this hand's template for this command. Restart engine after saving.","ثلاثة أمثلة متناسقة. متوسط المدة ${pattern.duration} مللي ثانية. يستبدل نموذج هذه اليد لهذا الأمر. أعد تشغيل المحرك بعد الحفظ."))
                     .setNegativeButton(tr("Cancel","إلغاء"),null)
                     .setPositiveButton(tr("Save","حفظ")){_,_->CameraSettings.saveMotion(this,selected,assigned,pattern);refresh();info.text=tr("Saved. Restart engine to apply.","تم الحفظ. أعد تشغيل المحرك للتطبيق.")}.show()
             }
@@ -97,7 +97,7 @@ class TrajectoryStudioActivity: LocalizedActivity() {
         stop.setOnClickListener{cancel();info.text=tr("Recording cancelled.","أُلغي التسجيل.")}
         forget.setOnClickListener{
             cancel();val selected=slot();val assigned=action()
-            androidx.appcompat.app.AlertDialog.Builder(this).setTitle("Forget ${assigned.name}?")
+            androidx.appcompat.app.AlertDialog.Builder(this).setTitle(tr("Forget ${assigned.name}?","حذف ${uiStatus(assigned.name)}؟"))
                 .setNegativeButton(tr("Cancel","إلغاء"),null).setPositiveButton(tr("Forget","حذف")){_,_->
                     CameraSettings.saveMotion(this,selected,assigned,null);refresh();info.text=tr("Forgotten. Restart engine to apply.","تم الحذف. أعد تشغيل المحرك للتطبيق.")
                 }.show()

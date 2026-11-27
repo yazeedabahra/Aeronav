@@ -23,7 +23,7 @@ class PersonalGestureActivity: LocalizedActivity() {
     private fun refreshSaved() {
         val p=CameraSettings.readPersonalPose(this,slot)
         saved.text=if(p==null) tr("No saved pose for selected hand.","لا توجد وضعية محفوظة لليد المحددة.") else
-            "Saved memberships: edge "+fmt(p.edge)+" • extension "+fmt(p.extension)+" • together "+fmt(p.together)
+            tr("Saved memberships: edge ","درجات الانتماء المحفوظة: حافة ")+fmt(p.edge)+tr(" • extension "," • امتداد ")+fmt(p.extension)+tr(" • together "," • تقارب ")+fmt(p.together)
     }
     private fun cancelCapture() {
         service?.cancelPoseTraining()
@@ -40,13 +40,13 @@ class PersonalGestureActivity: LocalizedActivity() {
             else {
                 val f=tr?.features
                 state.text=buildString {
-                    append(if(capturing) "Accepted examples: "+engine.trainingCount()+" / minimum 10\n" else "Ready to learn\n")
+                    append(if(capturing) tr("Accepted examples: ","الأمثلة المقبولة: ")+engine.trainingCount()+tr(" / minimum 10\n"," / الحد الأدنى 10\n") else tr("Ready to learn\n","جاهز للتعلم\n"))
                     if(tr?.present!=true || f==null) append(tr("Selected hand not reliably detected.","لم تُرصد اليد المحددة بشكل موثوق."))
                     else {
-                        append("Tracking quality "+fmt(tr.quality)+"\n")
-                        append("Edge "+fmt(f.edge)+" • extension "+fmt(f.extension)+" • together "+fmt(f.together)+"\n")
-                        append("Personal membership "+fmt(tr.personal))
-                        if(!f.eligible() || tr.pinchRatio<.34f) append("\nUse a slightly edge-on hand with fingers extended together and thumb separated.")
+                        append(tr("Tracking quality ","جودة التتبع ")+fmt(tr.quality)+"\n")
+                        append(tr("Edge ","الحافة ")+fmt(f.edge)+tr(" • extension "," • امتداد ")+fmt(f.extension)+tr(" • together "," • تقارب ")+fmt(f.together)+"\n")
+                        append(tr("Personal membership ","الانتماء الشخصي ")+fmt(tr.personal))
+                        if(!f.eligible() || tr.pinchRatio<.34f) append(tr("\nUse a slightly edge-on hand with fingers extended together and thumb separated.","\nوجّه حافة الكف قليلًا مع مد الأصابع متقاربة وفصل الإبهام."))
                     }
                 }
             }
@@ -89,7 +89,7 @@ class PersonalGestureActivity: LocalizedActivity() {
                 if(result==null) Toast.makeText(this,tr("Not enough consistent examples; retry for 3–10 seconds.","الأمثلة المتناسقة غير كافية؛ أعد المحاولة لمدة 3–10 ثوانٍ."),Toast.LENGTH_LONG).show()
                 else androidx.appcompat.app.AlertDialog.Builder(this)
                     .setTitle(tr("Save learned swipe pose?","حفظ وضعية السحب المتعلمة؟"))
-                    .setMessage("Edge "+fmt(result.edge)+" • extension "+fmt(result.extension)+" • together "+fmt(result.together)+tr("\nThis replaces only the selected hand's saved pose. Other safety gates remain unchanged.","\nيستبدل هذا وضعية اليد المحددة فقط. تبقى قواعد الأمان الأخرى دون تغيير."))
+                    .setMessage(tr("Edge ","الحافة ")+fmt(result.edge)+tr(" • extension "," • امتداد ")+fmt(result.extension)+tr(" • together "," • تقارب ")+fmt(result.together)+tr("\nThis replaces only the selected hand's saved pose. Other safety gates remain unchanged.","\nيستبدل هذا وضعية اليد المحددة فقط. تبقى قواعد الأمان الأخرى دون تغيير."))
                     .setNegativeButton(tr("Cancel","إلغاء"),null)
                     .setPositiveButton(tr("Save","حفظ")) { _,_ ->
                         CameraSettings.savePersonalPose(this,selected,result)

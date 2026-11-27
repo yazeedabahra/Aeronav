@@ -82,7 +82,7 @@ class MainActivity : LocalizedActivity() {
                     isGestureMode -> tr("Gesture armed","الإيماءة جاهزة")
                     else -> tr("Pointer tracking","تتبع المؤشر")
                 }
-                val summary = "$mode • Last: $gesture"
+                val summary = tr("$mode • Last: $gesture","${uiStatus(mode)} • آخر أمر: ${uiStatus(gesture)}")
                 val now = SystemClock.uptimeMillis()
                 if (now - lastSampleUpdate >= 250L) {
                     lastSampleUpdate = now
@@ -92,13 +92,13 @@ class MainActivity : LocalizedActivity() {
                     if(capturing && !service.captureActive()) {
                         capturing=false;autoButton.text=tr("Start auto calibration","بدء المعايرة التلقائية")
                         calibrationStatus.text=tr("Capture expired or interrupted. Try again.","انتهت مهلة التسجيل أو انقطع. حاول مجددًا.")
-                    } else calibrationStatus.text=if(capturing) "Move selected open palm to comfortable X/Y extremes. Samples: ${service.captureCount()}"
-                        else if(x.isFinite() && y.isFinite()) "Selected hand • ${(x*100).toInt()}% X / ${(y*100).toInt()}% Y"
+                    } else calibrationStatus.text=if(capturing) tr("Move selected open palm to comfortable X/Y extremes. Samples: ${service.captureCount()}","حرّك الكف المفتوح المحدد إلى حدود X/Y المريحة. العينات: ${service.captureCount()}")
+                        else if(x.isFinite() && y.isFinite()) tr("Selected hand • ${(x*100).toInt()}% X / ${(y*100).toInt()}% Y","اليد المحددة • ${(x*100).toInt()}% X / ${(y*100).toInt()}% Y")
                         else tr("Selected hand not detected","لم تُرصد اليد المحددة")
                     detailStatus.text = if (distanceSwitch.isChecked != service.usingDistanceDetail)
                         tr("Stop and restart engine to apply detail mode.","أوقف المحرك وأعد تشغيله لتطبيق وضع التفاصيل.")
                         else if (service.analysisWidth > 0)
-                            "Active analysis: ${service.analysisWidth} × ${service.analysisHeight}"
+                            tr("Active analysis: ${service.analysisWidth} × ${service.analysisHeight}","دقة التحليل النشط: ${service.analysisWidth} × ${service.analysisHeight}")
                         else tr("Waiting for camera.","بانتظار الكاميرا.")
                 }
                 if (summary != previousStatus || now - lastUiUpdate >= 250L) {
@@ -106,11 +106,11 @@ class MainActivity : LocalizedActivity() {
                     lastUiUpdate = now
                     txtEngineState.text = if (service.pauseReason != null) tr("Paused","متوقف مؤقتًا") else if (handDetected) tr("Tracking active","التتبع نشط") else tr("Searching","جاري البحث")
                     txtEngineState.setTextColor(tint(if (handDetected) R.color.accent_green else R.color.accent))
-                    txtStatus.text = "$summary\n$debugInfo\n${service.gestureDispatch}"
+                    txtStatus.text = "$summary\n${uiStatus(debugInfo)}\n${uiStatus(service.gestureDispatch)}"
                     val rate = service.resultRate
                     txtResultRate.text = if (rate > 0f) String.format(java.util.Locale.ROOT, "%.1f", rate) + " /s" else "—"
                     txtFrameAge.text = if (service.frameAgeMs >= 0) "${service.frameAgeMs} ms" else "—"
-                    txtProfile.text = service.powerStatus
+                    txtProfile.text = uiStatus(service.powerStatus)
                     btnStart.text = tr("ENGINE\nACTIVE","المحرك\nنشط")
                 }
             }
@@ -232,7 +232,7 @@ class MainActivity : LocalizedActivity() {
     private fun renderRange() {
         val r=ranges.effective(selectedHand)
         val label=if(ranges.linked) tr("Shared (both hands)","مشترك لليدين") else if(selectedHand==0) tr("Left hand","اليد اليسرى") else tr("Right hand","اليد اليمنى")
-        rangeSummary.text="$label • X ${r.widthPercent}% • Y ${r.heightPercent}%\nCenter X ${r.horizontalCenter}% • Y ${r.verticalCenter}%"
+        rangeSummary.text=tr("$label • X ${r.widthPercent}% • Y ${r.heightPercent}%\nCenter X ${r.horizontalCenter}% • Y ${r.verticalCenter}%","$label • X ${r.widthPercent}% • Y ${r.heightPercent}%\nالمركز X ${r.horizontalCenter}% • Y ${r.verticalCenter}%")
         calibrationView.setRanges(ranges,selectedHand)
     }
     private fun persistRanges() {
@@ -296,7 +296,7 @@ class MainActivity : LocalizedActivity() {
                 } else {
                     androidx.appcompat.app.AlertDialog.Builder(this)
                         .setTitle(tr("Apply measured range?","تطبيق النطاق المقاس؟"))
-                        .setMessage("X ${suggested.widthPercent}% • Y ${suggested.heightPercent}%\nCenter X ${suggested.horizontalCenter}% • Y ${suggested.verticalCenter}%")
+                        .setMessage(tr("X ${suggested.widthPercent}% • Y ${suggested.heightPercent}%\nCenter X ${suggested.horizontalCenter}% • Y ${suggested.verticalCenter}%","X ${suggested.widthPercent}% • Y ${suggested.heightPercent}%\nالمركز X ${suggested.horizontalCenter}% • Y ${suggested.verticalCenter}%"))
                         .setNegativeButton(tr("Cancel","إلغاء"),null)
                         .setPositiveButton(tr("Apply","تطبيق")) { _,_ ->
                             ranges=ranges.edit(selectedHand,suggested)

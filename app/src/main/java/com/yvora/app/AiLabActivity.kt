@@ -82,7 +82,7 @@ class AiLabActivity : LocalizedActivity() {
             val actions=route.actions
             if(actions!=null) {
                 plan=actions;planAt=android.os.SystemClock.uptimeMillis();execute.isEnabled=true
-                result.text=tr("LOCAL • no API request\n","محلي • لا يوجد طلب API\n")+metrics+"\n"+actions.joinToString("\n"){it.name}+tr("\nReview before execution.","\nراجع قبل التنفيذ.")
+                result.text=tr("LOCAL • no API request\n","محلي • لا يوجد طلب API\n")+metrics+"\n"+actions.joinToString("\n"){uiStatus(it.name)}+tr("\nReview before execution.","\nراجع قبل التنفيذ.")
             } else result.text=tr("No exact safe local plan. No request sent.\n","لا توجد خطة محلية آمنة ومطابقة. لم يُرسل طلب.\n")+metrics+
                 tr("\nEdit the command or explicitly choose Ask selected AI provider. Similarity alone never authorizes a command.","\nعدّل الأمر أو اختر سؤال المزود صراحةً. التشابه وحده لا يسمح بتنفيذ الأمر.")
         }
@@ -98,7 +98,7 @@ class AiLabActivity : LocalizedActivity() {
             }
             clearPlan();proposed=null;applyFix.isEnabled=false
             androidx.appcompat.app.AlertDialog.Builder(this)
-                .setTitle("Send this command to ${provider.title}?")
+                .setTitle(tr("Send this command to ${provider.title}?","إرسال هذا الأمر إلى ${provider.title}؟"))
                 .setMessage(command+tr("\n\nOnly this command is sent. API usage may cost money.","\n\nسيُرسل هذا الأمر فقط. قد تُحتسب تكلفة API."))
                 .setNegativeButton(tr("Cancel","إلغاء"),null)
                 .setPositiveButton(tr("Send","إرسال")) { _,_ ->
@@ -109,14 +109,14 @@ class AiLabActivity : LocalizedActivity() {
             diagnose.isEnabled=false
             local.isEnabled=false
             keyField.text.clear()
-            result.text="Requesting preview from ${provider.title}…"
+            result.text=tr("Requesting preview from ${provider.title}…","طلب معاينة من ${provider.title}…")
             executor.execute {
                 var actions:List<AiAction>?=null
                 val message=try {
                     val response=AiProviderClient.plan(provider,modelId,key,command)
                     actions=AiCommandGate.parse(response)
                     if(actions==null) tr("Unsupported or invalid response. No actions executed.","استجابة غير مدعومة أو غير صالحة. لم تُنفّذ أي أوامر.")
-                    else tr("Validated plan:\n","الخطة المقبولة:\n")+actions!!.joinToString("\n") { it.name }+tr("\nReview before execution.","\nراجع قبل التنفيذ.")
+                    else tr("Validated plan:\n","الخطة المقبولة:\n")+actions!!.joinToString("\n") { uiStatus(it.name) }+tr("\nReview before execution.","\nراجع قبل التنفيذ.")
                 } catch(e:AiNetworkException) { e.message ?: tr("Provider rejected request.","رفض المزود الطلب.") }
                 catch(e:IllegalArgumentException) { tr("Invalid configuration or command.","إعدادات أو أمر غير صالح.") }
                 catch(e:Exception) { tr("Connection or response error. Check model ID, key, and internet.","خطأ في الاتصال أو الاستجابة. تحقق من معرّف النموذج والمفتاح والإنترنت.") }
@@ -124,7 +124,7 @@ class AiLabActivity : LocalizedActivity() {
                     pending=false
                     if(!isDestroyed) {
                         if(ticket==generation) {
-                            result.text=message
+                            result.text=uiStatus(message)
                             val valid=actions?.takeIf { AiCommandGate.executable(it) }
                             plan=valid;planAt=android.os.SystemClock.uptimeMillis()
                             execute.isEnabled=valid!=null
@@ -145,7 +145,7 @@ class AiLabActivity : LocalizedActivity() {
             }
             androidx.appcompat.app.AlertDialog.Builder(this)
                 .setTitle(tr("Prepare these navigation actions?","تهيئة أوامر التنقل هذه؟"))
-                .setMessage(approved.joinToString("\n") { it.name }+tr("\n\nChoose the destination app yourself. Optionally Inspect screen locally for structural information, then press Run here on the floating AI control. Stop AI cancels remaining steps. No screen content is sent to the model.","\n\nاختر التطبيق المستهدف بنفسك. يمكنك فحص بنية الشاشة محليًا، ثم الضغط على تنفيذ هنا في النافذة العائمة. إيقاف الذكاء الاصطناعي يلغي الخطوات المتبقية. لا يُرسل محتوى الشاشة للنموذج."))
+                .setMessage(approved.joinToString("\n") { uiStatus(it.name) }+tr("\n\nChoose the destination app yourself. Optionally Inspect screen locally for structural information, then press Run here on the floating AI control. Stop AI cancels remaining steps. No screen content is sent to the model.","\n\nاختر التطبيق المستهدف بنفسك. يمكنك فحص بنية الشاشة محليًا، ثم الضغط على تنفيذ هنا في النافذة العائمة. إيقاف الذكاء الاصطناعي يلغي الخطوات المتبقية. لا يُرسل محتوى الشاشة للنموذج."))
                 .setNegativeButton(tr("Cancel","إلغاء"),null)
                 .setPositiveButton(tr("Prepare","تهيئة")) { _,_ ->
                     if(plan!=approved || pending || android.os.SystemClock.uptimeMillis()-planAt>120000L) {
@@ -171,7 +171,7 @@ class AiLabActivity : LocalizedActivity() {
             val state=YvoraService.instance?.diagnosticState() ?: "engine_running=false; live_metrics=unavailable"
             val report="Yvora version 2.0.1-dev\n$state\n"+DiagnosticCounters.report()
             androidx.appcompat.app.AlertDialog.Builder(this)
-                .setTitle("Send only this report to ${provider.title}?")
+                .setTitle(tr("Send only this report to ${provider.title}?","إرسال هذا التقرير فقط إلى ${provider.title}؟"))
                 .setMessage(report+tr("\n\nAPI usage may cost money. No screenshots or raw logs are included.","\n\nقد تُحتسب تكلفة API. لا يتضمن التقرير لقطات شاشة أو سجلات خام."))
                 .setNegativeButton(tr("Cancel","إلغاء"),null)
                 .setPositiveButton(tr("Analyze","تحليل")) { _,_ ->
@@ -190,7 +190,7 @@ class AiLabActivity : LocalizedActivity() {
                             var repair:RepairProposal?=null
                             val message=try {
                                 repair=DiagnosticGate.parse(AiProviderClient.diagnose(provider,modelId,key,report))
-                                repair?.let { "Suggested action: ${it.action.name}\n${it.explanation}\nNo change applied." }
+                                repair?.let { tr("Suggested action: ${it.action.name}\n${it.explanation}\nNo change applied.","الإجراء المقترح: ${uiStatus(it.action.name)}\n${it.explanation}\nلم يُطبّق تغيير.") }
                                     ?: tr("Invalid diagnostic response. No change applied.","استجابة تشخيص غير صالحة. لم يُطبّق أي تغيير.")
                             } catch(e:AiNetworkException) { e.message ?: tr("Provider rejected request.","رفض المزود الطلب.") }
                             catch(e:Exception) { tr("Connection or response error. Check configuration.","خطأ اتصال أو استجابة. تحقق من الإعدادات.") }
@@ -199,7 +199,7 @@ class AiLabActivity : LocalizedActivity() {
                                 if(!isDestroyed) {
                                     if(ticket==generation) {
                                         proposed=repair
-                                        result.text=message
+                                        result.text=uiStatus(message)
                                         applyFix.isEnabled=DiagnosticGate.canLowerDetail(
                                             repair?.action ?: RepairAction.KEEP_SETTINGS,
                                             CameraSettings.readDetail(this)==CameraDetail.DISTANCE)

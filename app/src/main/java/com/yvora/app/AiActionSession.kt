@@ -46,14 +46,14 @@ internal class AiActionSession(private val service:YvoraAccessibilityService) {
             setBackgroundColor(Color.rgb(25,35,48))
         }
         val caption=TextView(service).apply {
-            text="Yvora AI: ${plan.size} navigation action(s). Choose screen, then Run here."
+            text=tr("Yvora AI: ${plan.size} navigation action(s). Choose screen, then Run here.","ذكاء Yvora: ${plan.size} أمر تنقل. اختر الشاشة ثم اضغط تنفيذ هنا.")
             setTextColor(Color.WHITE)
             textSize=13f
             maxWidth=(service.resources.displayMetrics.widthPixels*.82f).toInt()
         }
-        val run=Button(service).apply { text="Run here";isAllCaps=false }
-        val stop=Button(service).apply { text="Stop AI";isAllCaps=false }
-        val inspect=Button(service).apply { text="Inspect screen locally";isAllCaps=false }
+        val run=Button(service).apply { text=tr("Run here","تنفيذ هنا");isAllCaps=false }
+        val stop=Button(service).apply { text=tr("Stop AI","إيقاف الذكاء الاصطناعي");isAllCaps=false }
+        val inspect=Button(service).apply { text=tr("Inspect screen locally","فحص الشاشة محليًا");isAllCaps=false }
         layout.addView(caption)
         layout.addView(inspect)
         layout.addView(LinearLayout(service).apply { orientation=LinearLayout.HORIZONTAL;addView(run);addView(stop) })
@@ -69,13 +69,13 @@ internal class AiActionSession(private val service:YvoraAccessibilityService) {
         // Reset hand touch ownership and hide cursors before accepting the plan.
         YvoraService.instance?.forceHidePointer()
         run.setOnClickListener { if(active && !running && generation==token) begin(token) }
-        stop.setOnClickListener { cancel("AI stopped by user") }
+        stop.setOnClickListener { cancel(tr("AI stopped by user","أوقف المستخدم التحكم الذكي")) }
         inspect.setOnClickListener {
             if(!active || running || generation!=token || !unlocked() || SystemClock.uptimeMillis()>deadline) return@setOnClickListener
             val structure=ScreenContext.inspect(service,::permitted)
-            caption.text=structure?.describe() ?: "Screen structure unavailable or restricted. Choose an ordinary app screen."
+            caption.text=structure?.describe() ?: tr("Screen structure unavailable or restricted. Choose an ordinary app screen.","بنية الشاشة غير متاحة أو مقيدة. اختر شاشة تطبيق عادي.")
         }
-        handler.postDelayed({ if(active && generation==token && !running) cancel("AI plan expired") },25000L)
+        handler.postDelayed({ if(active && generation==token && !running) cancel(tr("AI plan expired","انتهت صلاحية خطة الذكاء الاصطناعي")) },25000L)
         return true
     }
 
@@ -97,18 +97,18 @@ internal class AiActionSession(private val service:YvoraAccessibilityService) {
 
     private fun begin(token:Long) {
         if(!unlocked() || SystemClock.uptimeMillis()>deadline || YvoraAccessibilityService.dragBusy()) {
-            cancel("AI not started: screen locked, expired or touch busy");return
+            cancel(tr("AI not started: screen locked, expired or touch busy","لم يبدأ التحكم الذكي: الشاشة مقفلة أو انتهت المهلة أو اللمس مشغول"));return
         }
         val pkg=packageNow()
         if(!permitted(pkg)) {
-            status?.text="Choose an ordinary app screen first."
+            status?.text=tr("Choose an ordinary app screen first.","اختر شاشة تطبيق عادي أولًا.")
             return
         }
         target=pkg
         running=true
         deadline=SystemClock.uptimeMillis()+12000L
         start?.isEnabled=false
-        status?.text="AI running in selected app. Stop AI cancels remaining actions."
+        status?.text=tr("AI running in selected app. Stop AI cancels remaining actions.","التحكم الذكي نشط في التطبيق المحدد. إيقافه يلغي الخطوات المتبقية.")
         handler.postDelayed({ step(token) },350L)
     }
     private fun step(token:Long) {
@@ -116,15 +116,15 @@ internal class AiActionSession(private val service:YvoraAccessibilityService) {
         val current=packageNow()
         if(!unlocked() || SystemClock.uptimeMillis()>deadline ||
             !permitted(current) || current!=target || YvoraAccessibilityService.dragBusy()) {
-            cancel("AI stopped: screen changed, locked or touch busy");return
+            cancel(tr("AI stopped: screen changed, locked or touch busy","توقف التحكم الذكي: تغيّرت الشاشة أو أُقفلت أو اللمس مشغول"));return
         }
-        if(index>=actions.size) { cancel("AI navigation plan completed");return }
+        if(index>=actions.size) { cancel(tr("AI navigation plan completed","اكتملت خطة التنقل الذكي"));return }
         val a=actions[index]
-        status?.text="AI ${index+1}/${actions.size}: ${a.name}"
+        status?.text=tr("AI ${index+1}/${actions.size}: ${a.name}","الذكاء الاصطناعي ${index+1}/${actions.size}: ${uiStatus(a.name)}")
         if(a==AiAction.BACK || a==AiAction.HOME) {
             val code=if(a==AiAction.BACK) AccessibilityService.GLOBAL_ACTION_BACK else AccessibilityService.GLOBAL_ACTION_HOME
             val ok=service.performGlobalAction(code)
-            cancel(if(ok) "AI global navigation accepted by Android" else "AI action rejected by Android")
+            cancel(if(ok) tr("AI global navigation accepted by Android","قبل Android أمر التنقل العام") else tr("AI action rejected by Android","رفض Android الأمر"))
             return
         }
         val direction=when(a) {
@@ -137,14 +137,14 @@ internal class AiActionSession(private val service:YvoraAccessibilityService) {
         val stepIndex=index
         val ok=service.doScroll(direction) { completed ->
             if(!active || generation!=token || index!=stepIndex) return@doScroll
-            if(!completed) { cancel("AI swipe interrupted by Android");return@doScroll }
+            if(!completed) { cancel(tr("AI swipe interrupted by Android","أوقف Android السحب"));return@doScroll }
             index++
-            if(index==actions.size) cancel("AI navigation strokes completed")
+            if(index==actions.size) cancel(tr("AI navigation strokes completed","اكتملت إيماءات التنقل الذكي"))
             else handler.postDelayed({ step(token) },500L)
         }
-        if(!ok) { cancel("AI swipe rejected by Android");return }
+        if(!ok) { cancel(tr("AI swipe rejected by Android","رفض Android السحب"));return }
         handler.postDelayed({
-            if(active && generation==token && index==stepIndex) cancel("AI swipe callback timed out")
+            if(active && generation==token && index==stepIndex) cancel(tr("AI swipe callback timed out","انتهت مهلة تأكيد السحب"))
         },2000L)
     }
     fun cancel(message:String?=null) {
@@ -155,6 +155,6 @@ internal class AiActionSession(private val service:YvoraAccessibilityService) {
         panel=null;manager=null;status=null;start=null
         // An already dispatched, short stroke can finish; remaining steps cannot run.
         YvoraService.instance?.forceHidePointer()
-        if(message!=null) Toast.makeText(service,message,Toast.LENGTH_SHORT).show()
+        if(message!=null) Toast.makeText(service,uiStatus(message),Toast.LENGTH_SHORT).show()
     }
 }
