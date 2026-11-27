@@ -14,19 +14,22 @@ class YvoraAccessibilityService : AccessibilityService() {
         var instance: YvoraAccessibilityService? = null
 
         fun performScroll(direction: String): Boolean {
+            if(aiActive()) return false
             return instance?.doScroll(direction) ?: false
         }
 
         fun performTap(x: Float, y: Float): Boolean {
+            if(aiActive()) return false
             return instance?.doTap(x, y) ?: false
         }
 
         fun performBack(): Boolean {
+            if(aiActive()) return false
             return instance?.doBack() ?: false
         }
 
         fun isEnabled() = instance != null
-        internal fun beginDrag(x: Float, y: Float): Boolean = instance?.drag?.start(x, y) ?: false
+        internal fun beginDrag(x: Float, y: Float): Boolean = !aiActive() && instance?.drag?.start(x, y) == true
         internal fun moveDrag(x: Float, y: Float) { instance?.drag?.move(x, y) }
         internal fun endDrag(cancel: Boolean = false) { instance?.drag?.finish(cancel) }
         internal fun dragBusy(): Boolean = instance?.drag?.busy == true

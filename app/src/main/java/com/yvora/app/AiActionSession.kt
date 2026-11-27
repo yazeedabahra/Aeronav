@@ -105,8 +105,9 @@ internal class AiActionSession(private val service:YvoraAccessibilityService) {
     }
     private fun step(token:Long) {
         if(!active || !running || generation!=token) return
+        val current=packageNow()
         if(!unlocked() || SystemClock.uptimeMillis()>deadline ||
-            !permitted(packageNow()) || packageNow()!=target || YvoraAccessibilityService.dragBusy()) {
+            !permitted(current) || current!=target || YvoraAccessibilityService.dragBusy()) {
             cancel("AI stopped: screen changed, locked or touch busy");return
         }
         if(index>=actions.size) { cancel("AI navigation plan completed");return }
