@@ -156,6 +156,25 @@ class YvoraService : LifecycleService() {
 
     // These methods are called only on the main thread.
     private var ranges=HandRanges()
+    private var poseTraining:PoseTraining?=null
+    internal fun beginPoseTraining(slot:Int):Boolean {
+        if(slot !in 0..1 || !cameraRunning || !calibrationMode || YvoraAccessibilityService.aiActive()) return false
+        poseTraining=PoseTraining(slot,SystemClock.uptimeMillis())
+        return true
+    }
+    internal fun trainingCount()=poseTraining?.count ?: 0
+    internal fun trainingActive()=poseTraining!=null
+    internal fun cancelPoseTraining(){poseTraining=null}
+    internal fun finishPoseTraining():PoseFeatures? {
+        val training=poseTraining ?: return null
+        poseTraining=null
+        return if(calibrationMode && cameraRunning) training.finish(SystemClock.uptimeMillis()) else null
+    }
+    internal fun reloadPersonalPose(slot:Int) {
+        if(slot !in 0..1 || !calibrationMode) return
+        cursors[slot].recognizer.setPersonalTemplate(CameraSettings.readPersonalPose(this,slot))
+        cursors[slot].reset()
+    }
     private var fuzzyTraces=Array(2){FuzzyHandTrace()}
     private val identity=FuzzyHandIdentity()
     private var identityDegrees=FloatArray(2)
@@ -171,7 +190,7 @@ class YvoraService : LifecycleService() {
         if(cameraRunning && lastFuzzyAt>=0 && SystemClock.uptimeMillis()-lastFuzzyAt<=750L) fuzzyTraces[slot] else FuzzyHandTrace()
     internal fun fuzzyThermal():Float=thermalPolicy.fuzzyHeat
     internal fun fuzzyInterval():Long=analysisIntervalMs
-    private fun clearFuzzyTraces() { lastFuzzyAt=-1L;fuzzyTraces=Array(2){FuzzyHandTrace()};identity.reset();identityDegrees.fill(0f);predictionDegrees.fill(0f);identityAmbiguous=false;conflictStatus="None" }
+    private fun clearFuzzyTraces() { cancelPoseTraining();lastFuzzyAt=-1L;fuzzyTraces=Array(2){FuzzyHandTrace()};identity.reset();identityDegrees.fill(0f);predictionDegrees.fill(0f);identityAmbiguous=false;conflictStatus="None" }
     private val trackingWatchdog=object:Runnable {
         override fun run() {
             if(stopped) return
@@ -216,6 +235,7 @@ class YvoraService : LifecycleService() {
     internal fun setCalibrationMode(enabled: Boolean) {
         if (calibrationMode == enabled) return
         calibrationMode = enabled
+        cancelPoseTraining()
         cancelRangeCapture()
         forceHidePointer()
     }
@@ -262,6 +282,7 @@ class YvoraService : LifecycleService() {
         dualHandMode = CameraSettings.readDualHand(this)
         ranges=CameraSettings.readRanges(this)
         cursors.forEachIndexed { slot,cursor ->
+            cursor.recognizer.setPersonalTemplate(CameraSettings.readPersonalPose(this,slot))
             cursor.recognizer.setControlRange(ranges.effective(slot))
             cursor.recognizer.configureAssist(CameraSettings.readAssist(this), CameraSettings.readAssistLevel(this))
         }
@@ -619,6 +640,10 @@ class YvoraService : LifecycleService() {
         }
         fuzzyTraces=Array(2){ cursors[it].recognizer.fuzzyTrace }
         lastFuzzyAt=now
+        poseTraining?.let { session ->
+            if(session.expired(now) || !calibrationMode || YvoraAccessibilityService.aiActive()) cancelPoseTraining()
+            else if(!identityAmbiguous) session.add(fuzzyTraces[session.slot],now)
+        }
         val detected=states.filter { it.handDetected }
         val first=detected.firstOrNull()
         DiagnosticCounters.result(first!=null,frameAgeMs)

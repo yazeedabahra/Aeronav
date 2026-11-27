@@ -71,4 +71,4 @@ internal object FuzzyControllers {
 }
 internal data class FuzzyHandTrace(val present:Boolean=false,val label:Float=0f,val quality:Float=0f,
     val pose:Float=0f,val assisted:Float=0f,val swipe:Float=0f,val tau:Float=.095f,
-    val threshold:Float=.61f,val enabled:Boolean=false,val candidate:String="None",val pinchRatio:Float=1f)
+    val threshold:Float=.61f,val enabled:Boolean=false,val candidate:String="None",val pinchRatio:Float=1f,val features:PoseFeatures?=null,val personal:Float=0f)

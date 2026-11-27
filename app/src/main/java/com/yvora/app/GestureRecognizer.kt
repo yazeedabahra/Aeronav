@@ -68,6 +68,8 @@ class GestureRecognizer {
     private val fuzzyIntent = FuzzyIntentGate()
     private var assistEnabled=false
     private var assistThreshold=.61f
+    private var personalTemplate:PoseFeatures?=null
+    internal fun setPersonalTemplate(value:PoseFeatures?) { personalTemplate=value;fuzzyIntent.reset() }
     internal var fuzzyTrace=FuzzyHandTrace()
         private set
 
@@ -190,8 +192,11 @@ class GestureRecognizer {
         // A close pinch and the normal face-on pointer are not treated as assisted swipes.
         val labelScore=result.handednesses().getOrNull(handIndex)?.firstOrNull()?.score() ?: 0f
         val quality=FuzzyControllers.quality(labelScore,frameAgeMs)
-        val assistedScore=FuzzyControllers.assistedScore(knifePose.relaxedScore,quality,!ownedBefore && tapDist>=.34f)
-        val relaxed=fuzzyIntent.update(assistEnabled,assistedScore,assistThreshold,!ownedBefore && tapDist>=.34f)
+        val pinchClear=!ownedBefore && tapDist>=.34f
+        val standardScore=FuzzyControllers.assistedScore(knifePose.relaxedScore,quality,pinchClear)
+        val personalScore=PersonalGesture.degree(knifePose.features,personalTemplate,quality,pinchClear)
+        val assistedScore=FuzzyCore.or(standardScore,personalScore)
+        val relaxed=fuzzyIntent.update(assistEnabled,assistedScore,assistThreshold,pinchClear)
         val swipePose = (edgePose || relaxed) && !ownedBefore
         // The same temporal motion gate and one-shot latch still apply.
         val swipe = if (ownedBefore) null else horizontalSwipe.updatePose(swipePose, rawPX, rawPY, now,
@@ -300,7 +305,7 @@ class GestureRecognizer {
 
         fuzzyTrace=FuzzyHandTrace(true,labelScore,quality,knifePose.relaxedScore,assistedScore,
             horizontalSwipe.lastMembership,pointerFilter.tauSeconds,assistThreshold,assistEnabled,
-            triggeredGesture ?: gestureDirection ?: if(isPointerMode) "Pointer" else "None",tapDist)
+            triggeredGesture ?: gestureDirection ?: if(isPointerMode) "Pointer" else "None",tapDist,knifePose.features,personalScore)
         return GestureState(
             handDetected     = true,
             pointerX         = pointerFilter.x,

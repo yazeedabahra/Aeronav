@@ -36,6 +36,21 @@ internal object CameraSettings {
         write("",value.shared);write("left_",value.left);write("right_",value.right);e.apply()
     }
 
+    fun readPersonalPose(context:Context,slot:Int):PoseFeatures? {
+        val p=prefs(context);val prefix="personal_pose_"+slot+"_"
+        if(!p.getBoolean(prefix+"saved",false)) return null
+        return PoseFeatures(p.getFloat(prefix+"edge",0f),p.getFloat(prefix+"extension",0f),
+            p.getFloat(prefix+"together",0f)).takeIf{it.eligible()}
+    }
+    fun savePersonalPose(context:Context,slot:Int,value:PoseFeatures?) {
+        val prefix="personal_pose_"+slot+"_";val e=prefs(context).edit()
+        if(value==null || !value.eligible()) {
+            e.remove(prefix+"saved").remove(prefix+"edge").remove(prefix+"extension").remove(prefix+"together")
+        } else e.putBoolean(prefix+"saved",true).putFloat(prefix+"edge",value.edge)
+            .putFloat(prefix+"extension",value.extension).putFloat(prefix+"together",value.together)
+        e.apply()
+    }
+
     fun readAssist(context:Context):Boolean = prefs(context).getBoolean("assist_intent",false)
     fun saveAssist(context:Context,enabled:Boolean) { prefs(context).edit().putBoolean("assist_intent",enabled).apply() }
     fun readAssistLevel(context:Context):Int = prefs(context).getInt("assist_level",0).coerceIn(-1,1)
