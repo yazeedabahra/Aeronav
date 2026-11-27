@@ -12,6 +12,7 @@
     <uses-permission android:name="android.permission.SYSTEM_ALERT_WINDOW" />
 
     <application
+        android:name=".YvoraApplication"
         android:allowBackup="true"
         android:icon="@drawable/yvora_logo"
         android:roundIcon="@drawable/yvora_logo"
@@ -23,6 +24,7 @@
         <activity android:name=".FuzzyLabActivity" android:exported="false" />
         <activity android:name=".PersonalGestureActivity" android:exported="false" />
         <activity android:name=".TrajectoryStudioActivity" android:exported="false" />
+        <activity android:name=".TutorialActivity" android:exported="false" />
 
         <activity
             android:name=".MainActivity"

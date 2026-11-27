@@ -6,13 +6,13 @@ import java.util.ArrayDeque
 internal data class ScreenStructure(val visible:Int,val clickable:Int,val scrollable:Int,
     val forward:Int,val backward:Int,val vertical:Int,val horizontal:Int,val truncated:Boolean) {
     fun describe():String = buildString {
-        append("Local screen structure: $visible visible nodes; $clickable clickable; $scrollable scrollable.")
-        if(vertical>0) append("\nVertical scroll actions exposed.")
-        if(horizontal>0) append("\nHorizontal scroll actions exposed.")
-        if(forward+backward>0) append("\nForward/backward scroll actions exposed.")
-        if(scrollable==0) append("\nNo scrollable nodes exposed. The app may still support gestures.")
-        if(truncated) append("\nPartial inspection (bounded scan).")
-        append("\nNo text, labels, IDs, screenshots or form contents read. Not sent to AI.")
+        append(localized("Local screen structure: $visible visible nodes; $clickable clickable; $scrollable scrollable.","بنية الشاشة المحلية: $visible عنصر ظاهر؛ $clickable قابل للنقر؛ $scrollable قابل للتمرير."))
+        if(vertical>0) append(localized("\nVertical scroll actions exposed.","\nتوجد إجراءات تمرير عمودي."))
+        if(horizontal>0) append(localized("\nHorizontal scroll actions exposed.","\nتوجد إجراءات تمرير أفقي."))
+        if(forward+backward>0) append(localized("\nForward/backward scroll actions exposed.","\nتوجد إجراءات تمرير للأمام والخلف."))
+        if(scrollable==0) append(localized("\nNo scrollable nodes exposed. The app may still support gestures.","\nلا توجد عناصر تمرير ظاهرة للخدمة. قد يدعم التطبيق الإيماءات."))
+        if(truncated) append(localized("\nPartial inspection (bounded scan).","\nفحص جزئي (محدود النطاق)."))
+        append(localized("\nNo text, labels, IDs, screenshots or form contents read. Not sent to AI.","\nلم تُقرأ النصوص أو التسميات أو المعرّفات أو الصور أو بيانات النماذج. لم تُرسل إلى الذكاء الاصطناعي."))
     }
 }
 

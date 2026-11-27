@@ -213,6 +213,13 @@ class YvoraService : LifecycleService() {
     private var lastFuzzyAt=-1L
     internal fun fuzzyTrace(slot:Int):FuzzyHandTrace =
         if(cameraRunning && lastFuzzyAt>=0 && SystemClock.uptimeMillis()-lastFuzzyAt<=750L) fuzzyTraces[slot] else FuzzyHandTrace()
+    internal fun tutorialSample(slot:Int):PracticeSample? {
+        if(!calibrationMode || !cameraRunning || identityAmbiguous || slot !in 0..1) return null
+        val trace=fuzzyTrace(slot)
+        if(!trace.present || lastFuzzyAt<0 || trace.quality<.55f) return null
+        return PracticeSample(lastFuzzyAt,sampleXs[slot],sampleYs[slot],trace.pinchRatio,
+            trace.candidate=="Pointer",trace.quality)
+    }
     internal fun fuzzyThermal():Float=thermalPolicy.fuzzyHeat
     internal fun fuzzyInterval():Long=analysisIntervalMs
     private fun clearFuzzyTraces() { cancelPoseTraining();cancelMotionTraining();motionClutch.reset();lastFuzzyAt=-1L;fuzzyTraces=Array(2){FuzzyHandTrace()};identity.reset();identityDegrees.fill(0f);predictionDegrees.fill(0f);identityAmbiguous=false;conflictStatus="None" }
@@ -957,18 +964,18 @@ class YvoraService : LifecycleService() {
 
         return if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
             Notification.Builder(this, CHANNEL_ID)
-                .setContentTitle("Yvora Running")
-                .setContentText(pauseReason ?: "Hand gesture navigation active")
+                .setContentTitle(localized("Yvora Running","Yvora يعمل"))
+                .setContentText(pauseReason?.let(::uiStatus) ?: localized("Hand gesture navigation active","التنقل بإيماءات اليد نشط"))
                 .setSmallIcon(android.R.drawable.ic_menu_camera)
                 .setContentIntent(openPending)
-                .addAction(android.R.drawable.ic_delete, "Stop", stopPending)
+                .addAction(android.R.drawable.ic_delete, localized("Stop","إيقاف"), stopPending)
                 .setOngoing(true)
                 .build()
         } else {
             @Suppress("DEPRECATION")
             Notification.Builder(this)
-                .setContentTitle("Yvora Running")
-                .setContentText(pauseReason ?: "Hand gestures active")
+                .setContentTitle(localized("Yvora Running","Yvora يعمل"))
+                .setContentText(pauseReason?.let(::uiStatus) ?: localized("Hand gestures active","إيماءات اليد نشطة"))
                 .setSmallIcon(android.R.drawable.ic_menu_camera)
                 .setContentIntent(openPending)
                 .setOngoing(true)
@@ -980,7 +987,7 @@ class YvoraService : LifecycleService() {
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
             val channel = NotificationChannel(
                 CHANNEL_ID,
-                "Yvora Service",
+                localized("Yvora Service","خدمة Yvora"),
                 NotificationManager.IMPORTANCE_LOW
             ).apply { setShowBadge(false) }
             getSystemService(NotificationManager::class.java)

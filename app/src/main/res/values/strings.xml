@@ -1,4 +1,75 @@
 <resources>
     <string name="app_name">Yvora</string>
     <string name="accessibility_description">Yvora uses this service to perform touch and scroll gestures system-wide using hand detection.</string>
+<string name="ui_1" formatted="false">TOUCHLESS CONTROL SYSTEM</string>
+<string name="ui_2" formatted="false">LOCAL PROCESSING  /  PERFORMANCE V1</string>
+<string name="ui_3" formatted="false">Dual hand cursors (restart engine to apply)</string>
+<string name="ui_4" formatted="false">Assisted gestures (local fuzzy intent; restart engine)</string>
+<string name="ui_5" formatted="false">Assist tolerance: choose feedback based on your swipes. Restart engine to apply.</string>
+<string name="ui_6" formatted="false">Control mode (restart engine to apply)</string>
+<string name="ui_7" formatted="false">Select normal, zoom, rotation or custom trajectory mode</string>
+<string name="ui_8" formatted="false">Transform modes require dual hands. Open both palms, pinch both hands, then change separation for zoom or turn the line between the hands for rotation. Normal taps, drags and swipes are disabled in these modes. Uses screen center; supported apps only.</string>
+<string name="ui_9" formatted="false">Custom Trajectory Studio</string>
+<string name="ui_10" formatted="false">Personal Gesture Studio</string>
+<string name="ui_11" formatted="false">Fuzzy Intelligence Lab</string>
+<string name="ui_12" formatted="false">AI CORE  /  MODEL LAB</string>
+<string name="ui_13" formatted="false">01  /  CONTROL CORE</string>
+<string name="ui_14" formatted="false">ENGINE STATUS</string>
+<string name="ui_15" formatted="false">Standby</string>
+<string name="ui_16" formatted="false">START\nENGINE</string>
+<string name="ui_17" formatted="false">Start to detect hand gestures.</string>
+<string name="ui_18" formatted="false">Run in background</string>
+<string name="ui_19" formatted="false">Stop</string>
+<string name="ui_20" formatted="false">02  /  LIVE TELEMETRY</string>
+<string name="ui_21" formatted="false">RESULT RATE</string>
+<string name="ui_22" formatted="false">FRAME AGE</string>
+<string name="ui_23" formatted="false">Live results per second and latest processed frame age. Updates only while tracking.</string>
+<string name="ui_24" formatted="false">Adaptive pacing enabled</string>
+<string name="ui_25" formatted="false">03  /  CAMERA CALIBRATION</string>
+<string name="ui_26" formatted="false">Adjust the active camera area to match your comfortable hand movement. Smaller area means less movement to reach screen edges.</string>
+<string name="ui_27" formatted="false">Safe calibration (no taps or swipes)</string>
+<string name="ui_28" formatted="false">Link X/Y settings for both hands</string>
+<string name="ui_29" formatted="false">Select hand for calibration</string>
+<string name="ui_30" formatted="false">Cyan: left hand • Amber: right hand. Each range reaches the entire screen. Unlink to edit separately.</string>
+<string name="ui_31" formatted="false">Diagram of active camera area and detected hand position</string>
+<string name="ui_32" formatted="false">Start engine to test your camera.</string>
+<string name="ui_33" formatted="false">Width 100% • Height 100%</string>
+<string name="ui_34" formatted="false">Horizontal control range</string>
+<string name="ui_35" formatted="false">Vertical control range</string>
+<string name="ui_36" formatted="false">Horizontal center</string>
+<string name="ui_37" formatted="false">Vertical center</string>
+<string name="ui_38" formatted="false">Start auto calibration</string>
+<string name="ui_39" formatted="false">Automatic calibration uses only the selected open hand. Review the measured range before applying. Turn off Safe calibration to resume gestures.</string>
+<string name="ui_40" formatted="false">Distance detail (higher camera resolution)</string>
+<string name="ui_41" formatted="false">Optional: may help detect smaller hands further away, but can reduce speed. Does not change the physical lens field of view.</string>
+<string name="ui_42" formatted="false">Applies at next engine start.</string>
+<string name="ui_43" formatted="false">Reset selected control range</string>
+<string name="ui_44" formatted="false">04  /  PERMISSIONS</string>
+<string name="ui_45" formatted="false">Display overlay</string>
+<string name="ui_46" formatted="false">Show the control pointer</string>
+<string name="ui_47" formatted="false">Not enabled</string>
+<string name="ui_48" formatted="false">Enable</string>
+<string name="ui_49" formatted="false">Accessibility</string>
+<string name="ui_50" formatted="false">Perform taps and swipes</string>
+<string name="ui_51" formatted="false">05  /  GESTURE TEST</string>
+<string name="ui_52" formatted="false">Verify the service responds before leaving the app.</string>
+<string name="ui_53" formatted="false">Up</string>
+<string name="ui_54" formatted="false">Down</string>
+<string name="ui_55" formatted="false">Tap</string>
+<string name="ui_56" formatted="false">06  /  GESTURE GUIDE</string>
+<string name="ui_57" formatted="false">Move pointer</string>
+<string name="ui_58" formatted="false">Open your hand to move the cursor.</string>
+<string name="ui_59" formatted="false">Relax the other fingers. Briefly pinch index and thumb, then release to tap. Hold until the pointer turns green, move, then open fingers to drop (Android 8+).</string>
+<string name="ui_60" formatted="false">Scroll down (content)</string>
+<string name="ui_61" formatted="false">Right hand: index finger only.</string>
+<string name="ui_62" formatted="false">Scroll up (content)</string>
+<string name="ui_63" formatted="false">Right hand: index and middle fingers.</string>
+<string name="ui_64" formatted="false">Swipe left</string>
+<string name="ui_65" formatted="false">Either hand: extend fingers together, turn the edge of the palm toward the camera, then move left.</string>
+<string name="ui_66" formatted="false">Swipe right</string>
+<string name="ui_67" formatted="false">Either hand: turn the palm edge toward the camera, move right. Face the palm toward the camera to rearm.</string>
+<string name="ui_68" formatted="false">07  /  QUICK SETUP</string>
+<string name="ui_69" formatted="false">Enable both permissions, start the engine, then hold one hand about 50–80 cm from the camera. Keep the room well lit. Use Stop in the notification to end tracking.</string>
+<string name="ui_70" formatted="false">YVORA  /  LOCAL GESTURES + OPTIONAL AI</string>
+<string name="tutorial_open">Getting started / tutorial</string>
 </resources>

@@ -13,7 +13,7 @@ import androidx.appcompat.app.AppCompatActivity
 import java.util.Locale
 
 /** Read-only live trace + isolated mathematical simulation. No gesture injection or network. */
-class FuzzyLabActivity:AppCompatActivity() {
+class FuzzyLabActivity: LocalizedActivity() {
     private val handler=Handler(Looper.getMainLooper())
     private var service:YvoraService?=null
     private var oldCalibration=false
@@ -26,23 +26,23 @@ class FuzzyLabActivity:AppCompatActivity() {
     private val tick=object:Runnable {
         override fun run() {
             val engine=YvoraService.instance
-            live.text=if(engine==null) "Engine stopped. Start Yvora to see live degrees."
+            live.text=if(engine==null) localized("Engine stopped. Start Yvora to see live degrees.","المحرك متوقف. شغّل Yvora لرؤية درجات الانتماء.")
                 else buildString {
-                    append("Thermal membership: "+fmt(engine.fuzzyThermal())+" | analysis target: "+engine.fuzzyInterval()+" ms\n")
-                    append("Configured control mode: "+engine.transformModeName()+"\n")
-                    append("Identity: "+if(engine.identityUncertain()) "ambiguous" else "no ambiguity detected")
-                    append("\nTouch arbitration and zoom injection disabled during safe lab mode.\n")
+                    append(localized("Thermal membership: ","انتماء الحرارة: ")+fmt(engine.fuzzyThermal())+localized(" | analysis target: "," | معدل المعالجة المستهدف: ")+engine.fuzzyInterval()+" ms\n")
+                    append(localized("Configured control mode: ","وضع التحكم المحدد: ")+uiStatus(engine.transformModeName())+"\n")
+                    append(localized("Identity: ","هوية اليد: ")+if(engine.identityUncertain()) localized("ambiguous","ملتبسة") else localized("no ambiguity detected","لا يوجد التباس مرصود"))
+                    append(localized("\nTouch arbitration and zoom injection disabled during safe lab mode.\n","\nتتوقف أوامر اللمس والتكبير أثناء المعايرة الآمنة.\n"))
                     for(slot in 0..1) {
                         val tr=engine.fuzzyTrace(slot)
-                        append(if(slot==0) "\nLEFT (cyan)" else "\nRIGHT (amber)")
-                        if(!tr.present) { append(": no fresh hand result\n");continue }
-                        append("\nHandedness score: "+fmt(tr.label)+" | quality: "+fmt(tr.quality))
-                        append("\nIdentity membership: "+fmt(engine.identityDegree(slot))+" | prediction membership: "+fmt(engine.predictionDegree(slot)))
-                        append("\nRelaxed pose: "+fmt(tr.pose)+" | assisted rule: "+fmt(tr.assisted))
-                        append("\nPersonal pose membership: "+fmt(tr.personal))
-                        append("\nHorizontal motion: "+fmt(tr.swipe)+" | alpha: "+fmt(tr.threshold))
-                        append("\nCandidate: "+tr.candidate+" | assist: "+if(tr.enabled) "on" else "off")
-                        append("\nCursor smoothing tau: "+fmt(tr.tau*1000f)+" ms\n")
+                        append(if(slot==0) localized("\nLEFT (cyan)","\nاليسرى (سماوي)") else localized("\nRIGHT (amber)","\nاليمنى (كهرماني)"))
+                        if(!tr.present) { append(localized(": no fresh hand result\n",": لا توجد نتيجة حديثة\n"));continue }
+                        append(localized("\nHandedness score: ","\nدرجة تصنيف اليد: ")+fmt(tr.label)+localized(" | quality: "," | الجودة: ")+fmt(tr.quality))
+                        append(localized("\nIdentity membership: ","\nانتماء الهوية: ")+fmt(engine.identityDegree(slot))+localized(" | prediction membership: "," | انتماء التوقع: ")+fmt(engine.predictionDegree(slot)))
+                        append(localized("\nRelaxed pose: ","\nالوضعية المرنة: ")+fmt(tr.pose)+localized(" | assisted rule: "," | القاعدة المساعدة: ")+fmt(tr.assisted))
+                        append(localized("\nPersonal pose membership: ","\nانتماء الوضعية الشخصية: ")+fmt(tr.personal))
+                        append(localized("\nHorizontal motion: ","\nالحركة الأفقية: ")+fmt(tr.swipe)+localized(" | alpha: "," | ألفا: ")+fmt(tr.threshold))
+                        append(localized("\nCandidate: ","\nالأمر المرشح: ")+uiStatus(tr.candidate)+localized(" | assist: "," | المساعدة: ")+if(tr.enabled) localized("on","مفعّل") else localized("off","متوقف"))
+                        append(localized("\nCursor smoothing tau: ","\nمعامل تنعيم المؤشر تاو: ")+fmt(tr.tau*1000f)+" ms\n")
                     }
                 }
             handler.postDelayed(this,300L)
@@ -52,11 +52,11 @@ class FuzzyLabActivity:AppCompatActivity() {
         super.onCreate(savedInstanceState)
         val panel=LinearLayout(this).apply { orientation=LinearLayout.VERTICAL;setPadding(24,20,24,24) }
         fun text(value:String,size:Float=15f)=TextView(this).apply { text=value;textSize=size;panel.addView(this) }
-        text("YVORA FUZZY INTELLIGENCE",24f)
-        text("Live read-only telemetry. Hand injection is suspended while this lab is open. No data sent to AI.")
-        live=text("Waiting for engine…")
-        text("SANDBOX • change rules without affecting the phone",19f)
-        text("Membership values are degrees of compatibility, not probabilities. Operator choices here do not change runtime safety rules.")
+        text(localized("YVORA FUZZY INTELLIGENCE","مختبر الذكاء الضبابي YVORA"),24f)
+        text(localized("Live read-only telemetry. Hand injection is suspended while this lab is open. No data sent to AI.","قياسات مباشرة للقراءة فقط. يتوقف تنفيذ إيماءات اليد أثناء فتح المختبر. لا تُرسل بيانات إلى الذكاء الاصطناعي."))
+        live=text(localized("Waiting for engine…","بانتظار المحرك…"))
+        text(localized("SANDBOX • change rules without affecting the phone","بيئة تجريبية • غيّر القواعد دون التأثير على الهاتف"),19f)
+        text(localized("Membership values are degrees of compatibility, not probabilities. Operator choices here do not change runtime safety rules.","درجات الانتماء تمثل التوافق وليست احتمالات. خيارات العمليات هنا لا تغيّر قواعد الأمان أثناء التشغيل."))
         fun slider(label:String,initial:Float,update:(Float)->Unit) {
             val caption=text(label+": "+fmt(initial))
             panel.addView(SeekBar(this).apply {
@@ -82,14 +82,14 @@ class FuzzyLabActivity:AppCompatActivity() {
                 }
             })
         }
-        slider("Membership A",a){a=it};slider("Membership B",b){b=it};slider("Alpha cut",alpha){alpha=it}
-        text("T-Norm");picker(listOf("Minimum","Algebraic product")){t=TNorm.values()[it]}
-        text("S-Norm");picker(listOf("Maximum","Algebraic sum")){s=SNorm.values()[it]}
-        slider("Normalized hand speed",speed){speed=it}
+        slider(localized("Membership A","انتماء A"),a){a=it};slider(localized("Membership B","انتماء B"),b){b=it};slider(localized("Alpha cut","قطع ألفا (Alpha-Cut)"),alpha){alpha=it}
+        text(localized("T-Norm","الاقتران الضبابي (T-Norm)"));picker(listOf(localized("Minimum","القيمة الصغرى"),localized("Algebraic product","الضرب الجبري"))){t=TNorm.values()[it]}
+        text(localized("S-Norm","الفصل الضبابي (S-Norm)"));picker(listOf(localized("Maximum","القيمة الكبرى"),localized("Algebraic sum","الجمع الجبري"))){s=SNorm.values()[it]}
+        slider(localized("Normalized hand speed","سرعة اليد المعيارية"),speed){speed=it}
         graph=SpeedGraph(this)
         panel.addView(graph,LinearLayout.LayoutParams(LinearLayout.LayoutParams.MATCH_PARENT,(170*resources.displayMetrics.density).toInt()))
         simulation=text("")
-        text("Graph: blue = slow, green = medium, amber = fast; white marker = input. Mamdani output is a discrete centroid example, Sugeno is a singleton weighted average. Only the actual cursor smoothing controller is used for runtime.")
+        text(localized("Graph: blue = slow, green = medium, amber = fast; white marker = input. Mamdani output is a discrete centroid example, Sugeno is a singleton weighted average. Only the actual cursor smoothing controller is used for runtime.","الرسم: أزرق = بطيء، أخضر = متوسط، كهرماني = سريع؛ العلامة البيضاء = المدخل. Mamdani مثال لمركز الثقل العددي، وSugeno متوسط موزون. وحده متحكم تنعيم المؤشر الفعلي يعمل أثناء التشغيل."))
         setContentView(ScrollView(this).apply { addView(panel) })
         render()
     }
@@ -108,20 +108,20 @@ class FuzzyLabActivity:AppCompatActivity() {
         val dmLeft=FuzzyCore.not(and)
         val dmRight=FuzzyCore.or(FuzzyCore.not(a),FuzzyCore.not(b),s)
         simulation.text=buildString {
-            append("AND = "+fmt(and)+" | OR = "+fmt(or)+"\nNOT A = "+fmt(FuzzyCore.not(a)))
-            append("\nAlpha cut (AND): "+if(FuzzyCore.alphaCut(and,alpha)) "accepted in sandbox" else "rejected in sandbox")
-            append("\nDe Morgan: "+fmt(dmLeft)+" vs "+fmt(dmRight)+" | "+if(kotlin.math.abs(dmLeft-dmRight)<.0001f) "equal for these inputs" else "not equal for this operator pair")
-            append("\n\nMax-min: [A,B] ○ [[.9,.2],[.4,.8]]")
-            append("\nOutput = ["+fmt(composed[0])+", "+fmt(composed[1])+"] | Height = "+fmt(FuzzyCore.height(composed)))
-            append("\n\nSlow / medium / fast: "+deg.joinToString(" / "){fmt(it)})
+            append(localized("AND = ","التقاطع AND = ")+fmt(and)+localized(" | OR = "," | الاتحاد OR = ")+fmt(or)+localized("\nNOT A = ","\nمتممة A = ")+fmt(FuzzyCore.not(a)))
+            append(localized("\nAlpha cut (AND): ","\nقطع ألفا للتقاطع: ")+if(FuzzyCore.alphaCut(and,alpha)) localized("accepted in sandbox","مقبول في المختبر") else localized("rejected in sandbox","مرفوض في المختبر"))
+            append(localized("\nDe Morgan: ","\nدي مورغان: ")+fmt(dmLeft)+" vs "+fmt(dmRight)+" | "+if(kotlin.math.abs(dmLeft-dmRight)<.0001f) localized("equal for these inputs","متساويان لهذه المدخلات") else localized("not equal for this operator pair","غير متساويين لهذا الزوج من العمليات"))
+            append(localized("\n\nMax-min: [A,B] ○ [[.9,.2],[.4,.8]]","\n\nتركيب Max-Min: [A,B] ○ [[.9,.2],[.4,.8]]"))
+            append(localized("\nOutput = [","\nالناتج = [")+fmt(composed[0])+", "+fmt(composed[1])+localized("] | Height = ","] | الارتفاع = ")+fmt(FuzzyCore.height(composed)))
+            append(localized("\n\nSlow / medium / fast: ","\n\nبطيء / متوسط / سريع: ")+deg.joinToString(" / "){fmt(it)})
             append("\nSugeno: "+fmt(sug)+" | Mamdani: "+fmt(mam))
-            append("\nRuntime cursor tau for example speed: "+fmt(FuzzyControllers.cursorTau(speed)*1000f)+" ms")
+            append(localized("\nRuntime cursor tau for example speed: ","\nمعامل تنعيم المؤشر عند سرعة المثال: ")+fmt(FuzzyControllers.cursorTau(speed)*1000f)+" ms")
         }
         graph.speed=speed;graph.invalidate()
     }
     override fun onResume() {
         super.onResume()
-        YvoraAccessibilityService.stopAi("AI paused for Fuzzy Lab")
+        YvoraAccessibilityService.stopAi(localized("AI paused for Fuzzy Lab","أُوقف التحكم الذكي مؤقتًا لمختبر الفزي"))
         service=YvoraService.instance;oldCalibration=service?.isCalibrating==true
         service?.setCalibrationMode(true)
         handler.post(tick)
