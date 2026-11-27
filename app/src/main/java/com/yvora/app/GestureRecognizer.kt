@@ -106,10 +106,11 @@ class GestureRecognizer {
         result: HandLandmarkerResult,
         imageWidth: Int,
         imageHeight: Int,
-        supportsDrag: Boolean = android.os.Build.VERSION.SDK_INT >= 26
+        supportsDrag: Boolean = android.os.Build.VERSION.SDK_INT >= 26,
+        handIndex: Int = 0
     ): GestureState {
 
-        if (result.landmarks().isEmpty()) {
+        if (handIndex !in result.landmarks().indices) {
             pinchDrag.reset()
             currentGestureDirection = null
             gestureStartTime = 0L
@@ -125,7 +126,7 @@ class GestureRecognizer {
             )
         }
 
-        val landmarks = result.landmarks()[0]
+        val landmarks = result.landmarks()[handIndex]
         val w   = imageWidth.toFloat()
         val h   = imageHeight.toFloat()
         val now = SystemClock.uptimeMillis()
@@ -133,13 +134,7 @@ class GestureRecognizer {
         // --- Handedness ---
         // MediaPipe returns handedness from camera perspective
         // Since we flip the image, "Left" from MediaPipe = user's Left hand
-        val handedness = if (result.handednesses().isNotEmpty() &&
-            result.handednesses()[0].isNotEmpty()
-        ) {
-            result.handednesses()[0][0].categoryName() ?: "Unknown"
-        } else {
-            "Unknown"
-        }
+        val handedness = result.handednesses().getOrNull(handIndex)?.firstOrNull()?.categoryName() ?: "Unknown"
 
         // --- Pointer position ---
         val rawPX = (landmarks[0].x() + landmarks[5].x() + landmarks[9].x() +
@@ -164,7 +159,7 @@ class GestureRecognizer {
 
         // MediaPipe world landmarks provide depth without another model.
         // Fall back to aspect-corrected image landmarks if depth output is absent.
-        val world = result.worldLandmarks().firstOrNull()
+        val world = result.worldLandmarks().getOrNull(handIndex)
         for (i in 0..20) {
             if (world != null && world.size == 21) {
                 val pt = world[i]

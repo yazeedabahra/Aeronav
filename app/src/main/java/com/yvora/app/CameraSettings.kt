@@ -24,6 +24,10 @@ internal object CameraSettings {
         )
     }
 
+    fun readDualHand(context: Context): Boolean = prefs(context).getBoolean("dual_hand", true)
+
+    fun saveDualHand(context: Context, enabled:Boolean) { prefs(context).edit().putBoolean("dual_hand",enabled).apply() }
+
     fun readDetail(context: Context): CameraDetail =
         if (prefs(context).getBoolean("distance", false)) CameraDetail.DISTANCE else CameraDetail.AUTO
 

@@ -118,6 +118,10 @@ class MainActivity : AppCompatActivity() {
         bindViews()
         setupButtons()
         setupCalibration()
+        findViewById<Switch>(R.id.switchDualHand).apply {
+            isChecked=CameraSettings.readDualHand(this@MainActivity)
+            setOnCheckedChangeListener { _, enabled -> CameraSettings.saveDualHand(this@MainActivity,enabled) }
+        }
         findViewById<Button>(R.id.btnAiCore).setOnClickListener { startActivity(Intent(this, AiLabActivity::class.java)) }
         requestPermissions()
     }
