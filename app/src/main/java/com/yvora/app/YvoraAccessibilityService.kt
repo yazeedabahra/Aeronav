@@ -35,7 +35,8 @@ class YvoraAccessibilityService : AccessibilityService() {
         internal fun dragBusy(): Boolean = instance?.drag?.busy == true
         internal fun dragReady(): Boolean = instance?.drag?.ready == true
         internal fun zoomBusy():Boolean = instance?.zoomInProgress==true
-        internal fun performZoom(action:ZoomAction):Boolean = instance?.doZoom(action)==true
+        internal fun performZoom(action:ZoomAction):Boolean = instance?.doTransform(action,null)==true
+        internal fun performRotation(action:RotationAction):Boolean = instance?.doTransform(null,action)==true
         internal fun prepareAiPlan(actions:List<AiAction>):Boolean = !zoomBusy() && instance?.aiSession?.prepare(actions) == true
         internal fun aiActive():Boolean = instance?.aiSession?.active == true
         internal fun aiRunning():Boolean = instance?.aiSession?.running == true
@@ -70,7 +71,7 @@ class YvoraAccessibilityService : AccessibilityService() {
     }
 
     /** Actual two-contact Android stroke; fixed center, bounded duration. */
-    private fun doZoom(action:ZoomAction):Boolean {
+    private fun doTransform(action:ZoomAction?,rotation:RotationAction?):Boolean {
         if(Build.VERSION.SDK_INT<24 || drag?.busy==true || aiActive() || zoomInProgress) return false
         val power=getSystemService(POWER_SERVICE) as android.os.PowerManager
         val lock=getSystemService(KEYGUARD_SERVICE) as android.app.KeyguardManager
@@ -83,7 +84,19 @@ class YvoraAccessibilityService : AccessibilityService() {
         val end=scale*(if(action==ZoomAction.IN) .30f else .11f)
         val builder=GestureDescription.Builder()
         for(side in intArrayOf(-1,1)) {
-            val path=Path().apply { moveTo(cx+side*start,cy);lineTo(cx+side*end,cy) }
+            val path=Path()
+            if(rotation==null) {
+                if(action==null) return false
+                path.moveTo(cx+side*start,cy);path.lineTo(cx+side*end,cy)
+            } else {
+                val radius=scale*.24f
+                val angle=(if(rotation==RotationAction.CLOCKWISE) 30.0 else -30.0)*Math.PI/180.0
+                path.moveTo(cx+side*radius,cy)
+                for(i in 1..12) {
+                    val t=angle*i/12
+                    path.lineTo(cx+side*radius*kotlin.math.cos(t).toFloat(),cy+side*radius*kotlin.math.sin(t).toFloat())
+                }
+            }
             builder.addStroke(GestureDescription.StrokeDescription(path,0L,320L))
         }
         val token=++zoomGeneration
@@ -91,8 +104,8 @@ class YvoraAccessibilityService : AccessibilityService() {
         fun done() { if(token==zoomGeneration) zoomInProgress=false }
         val ok=try {
             dispatchGesture(builder.build(),object:GestureResultCallback(){
-                override fun onCompleted(g:GestureDescription?) { done();Log.d(TAG,"Zoom strokes completed") }
-                override fun onCancelled(g:GestureDescription?) { done();Log.d(TAG,"Zoom strokes cancelled") }
+                override fun onCompleted(g:GestureDescription?) { done();Log.d(TAG,"Two-contact strokes completed") }
+                override fun onCancelled(g:GestureDescription?) { done();Log.d(TAG,"Two-contact strokes cancelled") }
             },null)
         } catch(_:RuntimeException){false}
         if(!ok) done() else zoomHandler.postDelayed({done()},1600L)

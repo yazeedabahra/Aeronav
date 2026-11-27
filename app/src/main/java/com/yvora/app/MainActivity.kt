@@ -131,11 +131,19 @@ class MainActivity : AppCompatActivity() {
             isChecked=CameraSettings.readDualHand(this@MainActivity)
             setOnCheckedChangeListener { _, enabled -> CameraSettings.saveDualHand(this@MainActivity,enabled) }
         }
-        findViewById<Switch>(R.id.switchZoomMode).apply {
-            isChecked=CameraSettings.readZoomMode(this@MainActivity)
-            setOnCheckedChangeListener { _,enabled ->
-                CameraSettings.saveZoomMode(this@MainActivity,enabled)
-                toast(if(enabled) "Zoom-only mode requires dual hands. Stop and restart engine." else "Stop and restart engine to restore normal gestures.")
+        findViewById<android.widget.Spinner>(R.id.spinnerDualMode).apply {
+            adapter=android.widget.ArrayAdapter(this@MainActivity,android.R.layout.simple_spinner_dropdown_item,
+                listOf("Normal gestures","Zoom only (experimental)","Rotate only (experimental)"))
+            setSelection(CameraSettings.readDualMode(this@MainActivity).ordinal)
+            onItemSelectedListener=object:android.widget.AdapterView.OnItemSelectedListener {
+                override fun onNothingSelected(parent:android.widget.AdapterView<*>?) {}
+                override fun onItemSelected(parent:android.widget.AdapterView<*>?,view:android.view.View?,position:Int,id:Long) {
+                    val selected=DualMode.values()[position]
+                    if(CameraSettings.readDualMode(this@MainActivity)!=selected) {
+                        CameraSettings.saveDualMode(this@MainActivity,selected)
+                        toast("Stop and restart engine to apply. Transform modes require dual hands.")
+                    }
+                }
             }
         }
         findViewById<Switch>(R.id.switchAssistIntent).apply {

@@ -156,11 +156,13 @@ class YvoraService : LifecycleService() {
 
     // These methods are called only on the main thread.
     private var ranges=HandRanges()
-    private var zoomMode=false
+    private var dualMode=DualMode.NORMAL
     private val zoomEngine=FuzzyZoom()
+    private val rotationEngine=FuzzyRotation()
     private var zoomDegree=0f
     private var zoomMessage="Off"
-    internal fun zoomActiveMode()=zoomMode
+    internal fun zoomActiveMode()=dualMode!=DualMode.NORMAL
+    internal fun transformModeName()=dualMode.name
     internal fun zoomMembership()=zoomDegree
     internal fun zoomTrace()=zoomMessage
     private var poseTraining:PoseTraining?=null
@@ -287,7 +289,7 @@ class YvoraService : LifecycleService() {
         lowRamDevice = activityManager.isLowRamDevice || activityManager.memoryClass <= 128
         cameraDetail = CameraSettings.readDetail(this)
         dualHandMode = CameraSettings.readDualHand(this)
-        zoomMode=dualHandMode && CameraSettings.readZoomMode(this)
+        dualMode=if(dualHandMode) CameraSettings.readDualMode(this) else DualMode.NORMAL
         ranges=CameraSettings.readRanges(this)
         cursors.forEachIndexed { slot,cursor ->
             cursor.recognizer.setPersonalTemplate(CameraSettings.readPersonalPose(this,slot))
@@ -391,7 +393,7 @@ class YvoraService : LifecycleService() {
     }
 
     fun forceHidePointer() {
-        zoomEngine.reset();zoomDegree=0f;zoomMessage=if(zoomMode) "Open both palms to arm" else "Off"
+        zoomEngine.reset();rotationEngine.reset();zoomDegree=0f;zoomMessage=if(dualMode!=DualMode.NORMAL) "Open both palms to arm" else "Off"
         cancelDrag()
         cursors.forEach { it.reset() }
     }
@@ -683,7 +685,7 @@ class YvoraService : LifecycleService() {
         }
         analysisWidth=width;analysisHeight=height
         if(YvoraAccessibilityService.aiActive()) {
-            zoomEngine.reset();zoomDegree=0f
+            zoomEngine.reset();rotationEngine.reset();zoomDegree=0f
             // Explicit pinch or recognized swipe interrupts running AI, never injects a competing stroke.
             if(!calibrationMode && YvoraAccessibilityService.aiRunning() && detected.any { it.pinchAction==PinchAction.PENDING || it.triggeredGesture!=null }) {
                 YvoraAccessibilityService.stopAi("AI stopped by manual gesture")
@@ -704,30 +706,38 @@ class YvoraService : LifecycleService() {
             return
         }
 
-        if(zoomMode) {
+        if(dualMode!=DualMode.NORMAL) {
             // Dedicated mode: never let either individual recognizer inject a tap/drag/swipe.
             fun zoomSample(slot:Int):ZoomSample? {
                 val state=states[slot];val tr=fuzzyTraces[slot]
                 return if(state.handDetected && !identityAmbiguous) ZoomSample(state.rawX,state.rawY,
                     state.isPointerMode,tr.pinchRatio,FuzzyCore.and(tr.quality,identityDegrees[slot])) else null
             }
-            val decision=zoomEngine.update(zoomSample(0),zoomSample(1),now,height.toFloat()/width.coerceAtLeast(1))
-            zoomDegree=decision.degree;zoomMessage=decision.message
+            val a=zoomSample(0);val b=zoomSample(1)
+            val aspect=height.toFloat()/width.coerceAtLeast(1)
+            val zoom=if(dualMode==DualMode.ZOOM) zoomEngine.update(a,b,now,aspect) else null
+            val rotation=if(dualMode==DualMode.ROTATE) rotationEngine.update(a,b,now,aspect) else null
+            zoomDegree=zoom?.degree ?: rotation?.degree ?: 0f
+            zoomMessage=zoom?.message ?: rotation?.message ?: "Open both palms to arm"
+            val action=zoom?.action!=null || rotation?.action!=null
             for(i in 0..1) {
                 val state=states[i];val cursor=cursors[i]
                 cursor.armed=false;cursor.predictor.reset()
                 if(state.handDetected && !identityAmbiguous) {
                     cursor.position(state.pointerX,state.pointerY,screenWidth,screenHeight)
-                    cursor.color(if(decision.action!=null) android.graphics.Color.GREEN else android.graphics.Color.CYAN)
+                    cursor.color(if(action) android.graphics.Color.GREEN else android.graphics.Color.CYAN)
                     cursor.show()
                 } else cursor.hide()
             }
-            if(decision.action!=null) {
-                val ok=YvoraAccessibilityService.performZoom(decision.action)
-                gestureDispatch=if(ok) "Zoom ${decision.action.name} dispatched" else "Zoom rejected (busy or accessibility unavailable)"
+            if(action) {
+                val za=zoom?.action;val ra=rotation?.action
+                val ok=if(za!=null) YvoraAccessibilityService.performZoom(za)
+                    else ra!=null && YvoraAccessibilityService.performRotation(ra)
+                gestureDispatch=if(ok) "${dualMode.name} ${za?.name ?: ra?.name} dispatched"
+                    else "Transform rejected (busy or accessibility unavailable)"
                 if(!ok) DiagnosticCounters.rejected()
             }
-            statusListener?.onStatus(first!=null,"Zoom mode",false,true,zoomMessage+" | "+gestureDispatch)
+            statusListener?.onStatus(first!=null,"${dualMode.name} mode",false,true,zoomMessage+" | "+gestureDispatch)
             return
         }
 

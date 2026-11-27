@@ -53,7 +53,8 @@ class AiLabActivity : AppCompatActivity() {
         val model=edit("Model ID from provider dashboard")
         keyField=edit("Temporary / restricted API key",true)
         val prompt=edit("Command (e.g. swipe right, then go back)")
-        submit=Button(this).apply { text="Preview AI command";panel.addView(this) }
+        val local=Button(this).apply { text="Preview locally (no API)";panel.addView(this) }
+        submit=Button(this).apply { text="Ask selected AI provider";panel.addView(this) }
         execute=Button(this).apply { text="Prepare approved AI actions";isEnabled=false;panel.addView(this) }
         diagnose=Button(this).apply { text="Review diagnostic report";panel.addView(this) }
         applyFix=Button(this).apply { text="Apply suggested lower camera detail";isEnabled=false;panel.addView(this) }
@@ -72,6 +73,19 @@ class AiLabActivity : AppCompatActivity() {
             clearPlan()
             YvoraAccessibilityService.stopAi()
         }
+        local.setOnClickListener {
+            if(pending) return@setOnClickListener
+            clearPlan();proposed=null;applyFix.isEnabled=false
+            val route=FuzzyAiRouter.route(prompt.text.toString())
+            val metrics=String.format(java.util.Locale.ROOT,"Local coverage %.2f | lexical similarity %.2f | local membership %.2f",
+                route.coverage,route.similarity,route.localDegree)
+            val actions=route.actions
+            if(actions!=null) {
+                plan=actions;planAt=android.os.SystemClock.uptimeMillis();execute.isEnabled=true
+                result.text="LOCAL • no API request\n"+metrics+"\n"+actions.joinToString("\n"){it.name}+"\nReview before execution."
+            } else result.text="No exact safe local plan. No request sent.\n"+metrics+
+                "\nEdit the command or explicitly choose Ask selected AI provider. Similarity alone never authorizes a command."
+        }
         submit.setOnClickListener {
             if(pending) return@setOnClickListener
             val provider=providers[spinner.selectedItemPosition]
@@ -82,13 +96,18 @@ class AiLabActivity : AppCompatActivity() {
                 result.text="Enter model ID, API key, and command."
                 return@setOnClickListener
             }
-            clearPlan()
+            clearPlan();proposed=null;applyFix.isEnabled=false
+            androidx.appcompat.app.AlertDialog.Builder(this)
+                .setTitle("Send this command to ${provider.title}?")
+                .setMessage(command+"\n\nOnly this command is sent. API usage may cost money.")
+                .setNegativeButton("Cancel",null)
+                .setPositiveButton("Send") { _,_ ->
+            if(pending) return@setPositiveButton
             val ticket=++generation
             pending=true
-            proposed=null
-            applyFix.isEnabled=false
             submit.isEnabled=false
             diagnose.isEnabled=false
+            local.isEnabled=false
             keyField.text.clear()
             result.text="Requesting preview from ${provider.title}…"
             executor.execute {
@@ -113,9 +132,11 @@ class AiLabActivity : AppCompatActivity() {
                         }
                         submit.isEnabled=true
                         diagnose.isEnabled=true
+                        local.isEnabled=true
                     }
                 }
             }
+                }.show()
         }
         execute.setOnClickListener {
             val approved=plan ?: return@setOnClickListener
@@ -148,7 +169,7 @@ class AiLabActivity : AppCompatActivity() {
                 return@setOnClickListener
             }
             val state=YvoraService.instance?.diagnosticState() ?: "engine_running=false; live_metrics=unavailable"
-            val report="Yvora version 1.8-dev\n$state\n"+DiagnosticCounters.report()
+            val report="Yvora version 1.9-dev\n$state\n"+DiagnosticCounters.report()
             androidx.appcompat.app.AlertDialog.Builder(this)
                 .setTitle("Send only this report to ${provider.title}?")
                 .setMessage(report+"\n\nAPI usage may cost money. No screenshots or raw logs are included.")

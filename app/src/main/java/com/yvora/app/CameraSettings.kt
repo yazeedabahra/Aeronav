@@ -56,8 +56,14 @@ internal object CameraSettings {
     fun readAssistLevel(context:Context):Int = prefs(context).getInt("assist_level",0).coerceIn(-1,1)
     fun saveAssistLevel(context:Context,level:Int) { prefs(context).edit().putInt("assist_level",level.coerceIn(-1,1)).apply() }
 
-    fun readZoomMode(context:Context):Boolean=prefs(context).getBoolean("zoom_mode",false)
-    fun saveZoomMode(context:Context,value:Boolean) { prefs(context).edit().putBoolean("zoom_mode",value).apply() }
+    fun readDualMode(context:Context):DualMode {
+        val p=prefs(context)
+        val fallback=if(p.getBoolean("zoom_mode",false)) DualMode.ZOOM else DualMode.NORMAL
+        return DualMode.values().firstOrNull{it.name==p.getString("dual_transform_mode",fallback.name)} ?: fallback
+    }
+    fun saveDualMode(context:Context,value:DualMode) {
+        prefs(context).edit().putString("dual_transform_mode",value.name).putBoolean("zoom_mode",value==DualMode.ZOOM).apply()
+    }
 
     fun readDualHand(context: Context): Boolean = prefs(context).getBoolean("dual_hand", true)
 
