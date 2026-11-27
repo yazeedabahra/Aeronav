@@ -65,6 +65,24 @@ internal object CameraSettings {
         prefs(context).edit().putString("dual_transform_mode",value.name).putBoolean("zoom_mode",value==DualMode.ZOOM).apply()
     }
 
+    fun readMotionSlot(context:Context)=prefs(context).getInt("motion_slot",0).coerceIn(0,1)
+    fun saveMotionSlot(context:Context,slot:Int){prefs(context).edit().putInt("motion_slot",slot.coerceIn(0,1)).apply()}
+    fun readMotion(context:Context,slot:Int,action:AiAction):MotionPattern? {
+        val raw=prefs(context).getString("motion_${slot}_${action.name}",null) ?: return null
+        val parts=raw.split(',')
+        if(parts.size!=33) return null
+        val duration=parts[0].toLongOrNull() ?: return null
+        val values=parts.drop(1).map{it.toFloatOrNull() ?: return null}
+        return MotionPattern(values,duration).takeIf{it.valid()}
+    }
+    fun saveMotion(context:Context,slot:Int,action:AiAction,value:MotionPattern?) {
+        val e=prefs(context).edit();val key="motion_${slot}_${action.name}"
+        if(value==null || !value.valid() || action !in trajectoryActions) e.remove(key)
+        else e.putString(key,value.duration.toString()+","+value.values.joinToString(","))
+        e.apply()
+    }
+    fun readMotions(context:Context,slot:Int)=trajectoryActions.mapNotNull{a->readMotion(context,slot,a)?.let{a to it}}.toMap()
+
     fun readDualHand(context: Context): Boolean = prefs(context).getBoolean("dual_hand", true)
 
     fun saveDualHand(context: Context, enabled:Boolean) { prefs(context).edit().putBoolean("dual_hand",enabled).apply() }

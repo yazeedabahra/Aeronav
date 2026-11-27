@@ -4,7 +4,7 @@ import kotlin.math.abs
 import kotlin.math.atan2
 import kotlin.math.hypot
 
-internal enum class DualMode { NORMAL, ZOOM, ROTATE }
+internal enum class DualMode { NORMAL, ZOOM, ROTATE, CUSTOM }
 internal enum class RotationAction { CLOCKWISE, COUNTERCLOCKWISE }
 internal data class RotationDecision(val action:RotationAction?=null,val degree:Float=0f,val message:String="Open both palms to arm")
 

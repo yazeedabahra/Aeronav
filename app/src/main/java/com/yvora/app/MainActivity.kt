@@ -133,7 +133,7 @@ class MainActivity : AppCompatActivity() {
         }
         findViewById<android.widget.Spinner>(R.id.spinnerDualMode).apply {
             adapter=android.widget.ArrayAdapter(this@MainActivity,android.R.layout.simple_spinner_dropdown_item,
-                listOf("Normal gestures","Zoom only (experimental)","Rotate only (experimental)"))
+                listOf("Normal gestures","Zoom only (experimental)","Rotate only (experimental)","Custom trajectories (experimental)"))
             setSelection(CameraSettings.readDualMode(this@MainActivity).ordinal)
             onItemSelectedListener=object:android.widget.AdapterView.OnItemSelectedListener {
                 override fun onNothingSelected(parent:android.widget.AdapterView<*>?) {}
@@ -141,7 +141,7 @@ class MainActivity : AppCompatActivity() {
                     val selected=DualMode.values()[position]
                     if(CameraSettings.readDualMode(this@MainActivity)!=selected) {
                         CameraSettings.saveDualMode(this@MainActivity,selected)
-                        toast("Stop and restart engine to apply. Transform modes require dual hands.")
+                        toast("Stop and restart engine to apply. Zoom and rotation require dual hands.")
                     }
                 }
             }
@@ -161,6 +161,7 @@ class MainActivity : AppCompatActivity() {
                 }
             }
         }
+        findViewById<Button>(R.id.btnTrajectoryStudio).setOnClickListener { startActivity(Intent(this,TrajectoryStudioActivity::class.java)) }
         findViewById<Button>(R.id.btnPersonalStudio).setOnClickListener { startActivity(Intent(this,PersonalGestureActivity::class.java)) }
         findViewById<Button>(R.id.btnFuzzyLab).setOnClickListener { startActivity(Intent(this,FuzzyLabActivity::class.java)) }
         findViewById<Button>(R.id.btnAiCore).setOnClickListener { startActivity(Intent(this, AiLabActivity::class.java)) }
