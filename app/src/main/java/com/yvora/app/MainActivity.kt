@@ -131,6 +131,13 @@ class MainActivity : AppCompatActivity() {
             isChecked=CameraSettings.readDualHand(this@MainActivity)
             setOnCheckedChangeListener { _, enabled -> CameraSettings.saveDualHand(this@MainActivity,enabled) }
         }
+        findViewById<Switch>(R.id.switchZoomMode).apply {
+            isChecked=CameraSettings.readZoomMode(this@MainActivity)
+            setOnCheckedChangeListener { _,enabled ->
+                CameraSettings.saveZoomMode(this@MainActivity,enabled)
+                toast(if(enabled) "Zoom-only mode requires dual hands. Stop and restart engine." else "Stop and restart engine to restore normal gestures.")
+            }
+        }
         findViewById<Switch>(R.id.switchAssistIntent).apply {
             isChecked=CameraSettings.readAssist(this@MainActivity)
             setOnCheckedChangeListener { _,enabled -> CameraSettings.saveAssist(this@MainActivity,enabled) }
@@ -146,6 +153,7 @@ class MainActivity : AppCompatActivity() {
                 }
             }
         }
+        findViewById<Button>(R.id.btnPersonalStudio).setOnClickListener { startActivity(Intent(this,PersonalGestureActivity::class.java)) }
         findViewById<Button>(R.id.btnFuzzyLab).setOnClickListener { startActivity(Intent(this,FuzzyLabActivity::class.java)) }
         findViewById<Button>(R.id.btnAiCore).setOnClickListener { startActivity(Intent(this, AiLabActivity::class.java)) }
         requestPermissions()

@@ -56,6 +56,9 @@ internal object CameraSettings {
     fun readAssistLevel(context:Context):Int = prefs(context).getInt("assist_level",0).coerceIn(-1,1)
     fun saveAssistLevel(context:Context,level:Int) { prefs(context).edit().putInt("assist_level",level.coerceIn(-1,1)).apply() }
 
+    fun readZoomMode(context:Context):Boolean=prefs(context).getBoolean("zoom_mode",false)
+    fun saveZoomMode(context:Context,value:Boolean) { prefs(context).edit().putBoolean("zoom_mode",value).apply() }
+
     fun readDualHand(context: Context): Boolean = prefs(context).getBoolean("dual_hand", true)
 
     fun saveDualHand(context: Context, enabled:Boolean) { prefs(context).edit().putBoolean("dual_hand",enabled).apply() }

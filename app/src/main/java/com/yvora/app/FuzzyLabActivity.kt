@@ -30,7 +30,7 @@ class FuzzyLabActivity:AppCompatActivity() {
                 else buildString {
                     append("Thermal membership: "+fmt(engine.fuzzyThermal())+" | analysis target: "+engine.fuzzyInterval()+" ms\n")
                     append("Identity: "+if(engine.identityUncertain()) "ambiguous" else "no ambiguity detected")
-                    append("\nTouch arbitration disabled during safe lab mode.\n")
+                    append("\nTouch arbitration and zoom injection disabled during safe lab mode.\n")
                     for(slot in 0..1) {
                         val tr=engine.fuzzyTrace(slot)
                         append(if(slot==0) "\nLEFT (cyan)" else "\nRIGHT (amber)")
@@ -38,6 +38,7 @@ class FuzzyLabActivity:AppCompatActivity() {
                         append("\nHandedness score: "+fmt(tr.label)+" | quality: "+fmt(tr.quality))
                         append("\nIdentity membership: "+fmt(engine.identityDegree(slot))+" | prediction membership: "+fmt(engine.predictionDegree(slot)))
                         append("\nRelaxed pose: "+fmt(tr.pose)+" | assisted rule: "+fmt(tr.assisted))
+                        append("\nPersonal pose membership: "+fmt(tr.personal))
                         append("\nHorizontal motion: "+fmt(tr.swipe)+" | alpha: "+fmt(tr.threshold))
                         append("\nCandidate: "+tr.candidate+" | assist: "+if(tr.enabled) "on" else "off")
                         append("\nCursor smoothing tau: "+fmt(tr.tau*1000f)+" ms\n")

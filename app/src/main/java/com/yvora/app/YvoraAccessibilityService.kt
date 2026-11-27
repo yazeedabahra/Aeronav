@@ -29,18 +29,23 @@ class YvoraAccessibilityService : AccessibilityService() {
         }
 
         fun isEnabled() = instance != null
-        internal fun beginDrag(x: Float, y: Float): Boolean = !aiActive() && instance?.drag?.start(x, y) == true
+        internal fun beginDrag(x: Float, y: Float): Boolean = !aiActive() && !zoomBusy() && instance?.drag?.start(x, y) == true
         internal fun moveDrag(x: Float, y: Float) { instance?.drag?.move(x, y) }
         internal fun endDrag(cancel: Boolean = false) { instance?.drag?.finish(cancel) }
         internal fun dragBusy(): Boolean = instance?.drag?.busy == true
         internal fun dragReady(): Boolean = instance?.drag?.ready == true
-        internal fun prepareAiPlan(actions:List<AiAction>):Boolean = instance?.aiSession?.prepare(actions) == true
+        internal fun zoomBusy():Boolean = instance?.zoomInProgress==true
+        internal fun performZoom(action:ZoomAction):Boolean = instance?.doZoom(action)==true
+        internal fun prepareAiPlan(actions:List<AiAction>):Boolean = !zoomBusy() && instance?.aiSession?.prepare(actions) == true
         internal fun aiActive():Boolean = instance?.aiSession?.active == true
         internal fun aiRunning():Boolean = instance?.aiSession?.running == true
         internal fun stopAi(message:String?=null) { instance?.aiSession?.cancel(message) }
     }
 
     private var drag: ContinuousDrag? = null
+    private var zoomInProgress=false
+    private var zoomGeneration=0L
+    private val zoomHandler=android.os.Handler(android.os.Looper.getMainLooper())
     private var aiSession: AiActionSession? = null
 
     override fun onServiceConnected() {
@@ -57,10 +62,41 @@ class YvoraAccessibilityService : AccessibilityService() {
     override fun onDestroy() {
         aiSession?.cancel()
         aiSession=null
+        zoomGeneration++;zoomInProgress=false;zoomHandler.removeCallbacksAndMessages(null)
         drag?.disconnected()
         drag = null
         super.onDestroy()
         if (instance === this) instance = null
+    }
+
+    /** Actual two-contact Android stroke; fixed center, bounded duration. */
+    private fun doZoom(action:ZoomAction):Boolean {
+        if(Build.VERSION.SDK_INT<24 || drag?.busy==true || aiActive() || zoomInProgress) return false
+        val power=getSystemService(POWER_SERVICE) as android.os.PowerManager
+        val lock=getSystemService(KEYGUARD_SERVICE) as android.app.KeyguardManager
+        if(!power.isInteractive || lock.isKeyguardLocked) return false
+        val dm=resources.displayMetrics
+        val cx=dm.widthPixels/2f;val cy=dm.heightPixels/2f
+        val scale=minOf(dm.widthPixels,dm.heightPixels).toFloat()
+        if(scale<100f) return false
+        val start=scale*(if(action==ZoomAction.IN) .11f else .30f)
+        val end=scale*(if(action==ZoomAction.IN) .30f else .11f)
+        val builder=GestureDescription.Builder()
+        for(side in intArrayOf(-1,1)) {
+            val path=Path().apply { moveTo(cx+side*start,cy);lineTo(cx+side*end,cy) }
+            builder.addStroke(GestureDescription.StrokeDescription(path,0L,320L))
+        }
+        val token=++zoomGeneration
+        zoomInProgress=true
+        fun done() { if(token==zoomGeneration) zoomInProgress=false }
+        val ok=try {
+            dispatchGesture(builder.build(),object:GestureResultCallback(){
+                override fun onCompleted(g:GestureDescription?) { done();Log.d(TAG,"Zoom strokes completed") }
+                override fun onCancelled(g:GestureDescription?) { done();Log.d(TAG,"Zoom strokes cancelled") }
+            },null)
+        } catch(_:RuntimeException){false}
+        if(!ok) done() else zoomHandler.postDelayed({done()},1600L)
+        return ok
     }
 
     // -------------------------------------------------------
@@ -70,7 +106,7 @@ class YvoraAccessibilityService : AccessibilityService() {
     // -------------------------------------------------------
 
     fun doScroll(direction: String, completed: ((Boolean)->Unit)? = null): Boolean {
-        if (drag?.busy == true) return false
+        if (drag?.busy == true || zoomInProgress) return false
         val metrics = resources.displayMetrics
         val screenW = metrics.widthPixels.toFloat()
         val screenH = metrics.heightPixels.toFloat()
@@ -135,7 +171,7 @@ class YvoraAccessibilityService : AccessibilityService() {
     // -------------------------------------------------------
 
     fun doTap(x: Float, y: Float): Boolean {
-        if (drag?.busy == true) return false
+        if (drag?.busy == true || zoomInProgress) return false
         val path = Path().apply {
             moveTo(x, y)
             lineTo(x + 1f, y + 1f)
@@ -156,7 +192,7 @@ class YvoraAccessibilityService : AccessibilityService() {
     // -------------------------------------------------------
 
     fun doBack(): Boolean {
-        if (drag?.busy == true) return false
+        if (drag?.busy == true || zoomInProgress) return false
         Log.d(TAG, "Performing BACK")
         return performGlobalAction(GLOBAL_ACTION_BACK)
     }
