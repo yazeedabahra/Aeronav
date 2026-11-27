@@ -29,7 +29,7 @@ internal object AppLanguage {
         return context.createConfigurationContext(config)
     }
 }
-internal fun tr(en:String,ar:String):String=if(AppLanguage.arabic) ar else en
+internal fun localized(en:String,ar:String):String=if(AppLanguage.arabic) ar else en
 abstract class LocalizedActivity:AppCompatActivity() {
     override fun attachBaseContext(newBase:Context) { super.attachBaseContext(AppLanguage.wrap(newBase)) }
 }
