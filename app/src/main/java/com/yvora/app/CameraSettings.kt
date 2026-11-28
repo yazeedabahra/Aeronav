@@ -51,6 +51,9 @@ internal object CameraSettings {
         e.apply()
     }
 
+    fun readCanvasRenderer(context:Context):Boolean=prefs(context).getBoolean("canvas_renderer",true)
+    fun saveCanvasRenderer(context:Context,enabled:Boolean){prefs(context).edit().putBoolean("canvas_renderer",enabled).apply()}
+
     fun readResponsive(context:Context):Boolean=prefs(context).getBoolean("responsive_cursor",true)
     fun saveResponsive(context:Context,enabled:Boolean){prefs(context).edit().putBoolean("responsive_cursor",enabled).apply()}
 

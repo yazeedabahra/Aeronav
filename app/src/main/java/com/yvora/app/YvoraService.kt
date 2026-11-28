@@ -79,6 +79,9 @@ class YvoraService : LifecycleService() {
     // FIELDS
     // -------------------------------------------------------
     private val cursors = Array(2) { HandCursor(it) }
+    private var cursorCanvas:CursorCanvas?=null
+    val canvasActive:Boolean get()=cursorCanvas!=null
+    val cursorDrawRate:Float get()=cursorCanvas?.drawRate(SystemClock.uptimeMillis()) ?: 0f
     private val touchArbiter = TouchArbiter()
     private var dualHandMode = true
 
@@ -127,7 +130,7 @@ class YvoraService : LifecycleService() {
         }
     }
 
-     internal fun diagnosticState(): String = "engine_running=$cameraRunning; calibration=$calibrationMode; thermal_status=${if (Build.VERSION.SDK_INT >= 29) thermalLevel.toString() else "unavailable"}; battery_temp_tenths_c=${batteryTenths ?: "unavailable"}; analysis_target_ms=$analysisIntervalMs; analysis_resolution=${analysisWidth}x$analysisHeight; distance_detail=$usingDistanceDetail; accessibility_connected=${YvoraAccessibilityService.isEnabled()}"
+     internal fun diagnosticState(): String = "engine_running=$cameraRunning; calibration=$calibrationMode; thermal_status=${if (Build.VERSION.SDK_INT >= 29) thermalLevel.toString() else "unavailable"}; battery_temp_tenths_c=${batteryTenths ?: "unavailable"}; analysis_target_ms=$analysisIntervalMs; analysis_resolution=${analysisWidth}x$analysisHeight; distance_detail=$usingDistanceDetail; accessibility_connected=${YvoraAccessibilityService.isEnabled()}; cursor_canvas=$canvasActive; cursor_draws_per_second=${cursorDrawRate.toInt()}; cursor_draw_gap_ms=${cursorCanvas?.lastDrawGapMs ?: 0}; tracking_results_per_second=${resultRate.toInt()}; frame_age_ms=$frameAgeMs"
     var gestureDispatch = "No command yet"
         private set
     var screenWidth = 0
@@ -406,6 +409,7 @@ class YvoraService : LifecycleService() {
         cameraExecutor.shutdown()
 
         cursors.forEach { it.remove() }
+        cursorCanvas?.detach();cursorCanvas=null
 
         if (instance === this) {
             instance = null
@@ -420,6 +424,12 @@ class YvoraService : LifecycleService() {
     private fun setupOverlayWindows() {
         if (!Settings.canDrawOverlays(this)) return
         val manager=getSystemService(WINDOW_SERVICE) as WindowManager
+        if(CameraSettings.readCanvasRenderer(this)) {
+            val layer=CursorCanvas(this)
+            if(layer.attach(manager)){
+                cursorCanvas=layer;cursors.forEach{it.attachCanvas(layer)};return
+            }
+        }
         cursors.forEach { it.attach(this,manager) }
     }
 
