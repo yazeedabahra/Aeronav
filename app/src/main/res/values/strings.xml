@@ -76,4 +76,5 @@
 <string name="responsive_cursor_help">Faster tracking while cool, with automatic thermal fallback. May use more battery. Turn off for balanced pacing.</string>
 <string name="canvas_renderer">Smooth canvas renderer (restart engine)</string>
 <string name="canvas_renderer_help">Draw both cursors in one fixed overlay instead of moving windows. Turn off if another app blocks touches.</string>
+<string name="performance_session">Local performance test (up to 30 min)</string>
 </resources>

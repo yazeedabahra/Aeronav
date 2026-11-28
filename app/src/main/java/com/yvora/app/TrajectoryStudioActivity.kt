@@ -61,7 +61,7 @@ class TrajectoryStudioActivity: LocalizedActivity() {
         label(localized("Runtime hand in custom mode","يد التحكم في الوضع المخصص"))
         val activeHand=spinner(listOf(localized("Left (cyan)","اليسرى (سماوي)"),localized("Right (amber)","اليمنى (كهرماني)")))
         activeHand.setSelection(CameraSettings.readMotionSlot(this))
-        label(localized("Choose Custom trajectories on the main screen and restart. Only the selected hand’s registered commands execute. Ordinary gestures are inactive in this mode; the pinch is a recording clutch, not a tap. Fixed-center zoom/rotation work in supported apps. Saved data is normalized paths, not camera images.","اختر المسارات المخصصة من الرئيسية وأعد التشغيل. تُنفذ فقط أوامر اليد المحددة المسجلة. الإيماءات العادية غير نشطة في هذا الوضع؛ القرص لتسجيل المسار وليس للنقر. يعمل التكبير والتدوير حول مركز الشاشة في التطبيقات الداعمة. تُحفظ المسارات المعيارية لا صور الكاميرا."))
+        label(localized("Choose Custom gesture registry on the main screen and restart. Only the selected hand’s registered commands execute. Ordinary gestures are inactive in this mode; the pinch is a recording clutch, not a tap. Fixed-center zoom/rotation work in supported apps. Saved data is normalized paths, not camera images.","اختر سجل الإيماءات المخصصة من الرئيسية وأعد التشغيل. تُنفذ فقط أوامر اليد المحددة المسجلة. الإيماءات العادية غير نشطة في هذا الوضع؛ القرص لتسجيل المسار وليس للنقر. يعمل التكبير والتدوير حول مركز الشاشة في التطبيقات الداعمة. تُحفظ المسارات المعيارية لا صور الكاميرا."))
         val listener=object:AdapterView.OnItemSelectedListener{
             override fun onNothingSelected(parent:AdapterView<*>?){}
             override fun onItemSelected(parent:AdapterView<*>?,view:View?,position:Int,id:Long){refresh()}

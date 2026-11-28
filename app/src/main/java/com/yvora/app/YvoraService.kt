@@ -291,6 +291,7 @@ class YvoraService : LifecycleService() {
     private fun recordTelemetry(frameTime: Long) {
         val now = SystemClock.uptimeMillis()
         frameAgeMs = (now - frameTime).coerceAtLeast(0L)
+        LocalPerformance.frame(frameAgeMs,now)
         if (rateWindowStart < 0L) {
             rateWindowStart = now
             rateWindowCount = 0
@@ -382,6 +383,7 @@ class YvoraService : LifecycleService() {
     }
 
     override fun onDestroy() {
+        LocalPerformance.stop(SystemClock.uptimeMillis())
         stopped = true
         YvoraAccessibilityService.stopAi("Yvora engine stopped")
         if (receiverRegistered) {
@@ -505,6 +507,7 @@ class YvoraService : LifecycleService() {
             thermalPolicy.cooling -> "Cooling • Camera paused"
             else -> null
         }
+        LocalPerformance.sample(now,cursorDrawRate,batteryTenths,thermalPolicy.warm,reason!=null)
         val changed = reason != pauseReason
         pauseReason = reason
         if (reason != null) {

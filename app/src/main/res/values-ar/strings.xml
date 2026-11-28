@@ -76,4 +76,5 @@
 <string name="responsive_cursor_help">تتبع أسرع عندما يكون الهاتف باردًا، مع العودة تلقائيًا إلى الحماية الحرارية. قد يزيد استهلاك البطارية. أوقفه للأداء المتوازن.</string>
 <string name="canvas_renderer">محرك الرسم السلس (أعد تشغيل المحرك)</string>
 <string name="canvas_renderer_help">يرسم المؤشرين في طبقة ثابتة بدل تحريك النوافذ. أوقفه إذا منع تطبيق آخر اللمس.</string>
+<string name="performance_session">اختبار الأداء المحلي (حتى 30 دقيقة)</string>
 </resources>
