@@ -27,6 +27,26 @@ class YvoraAccessibilityService : AccessibilityService() {
             return try { service.doScroll(direction,completed) } catch(_:RuntimeException){false}
         }
 
+        internal fun performRegistryAction(action:RegistryAction):Boolean {
+            val service=instance ?: return false
+            if(aiActive() || zoomBusy() || dragBusy())return false
+            val power=service.getSystemService(android.content.Context.POWER_SERVICE) as android.os.PowerManager
+            val lock=service.getSystemService(android.content.Context.KEYGUARD_SERVICE) as android.app.KeyguardManager
+            if(!power.isInteractive || lock.isKeyguardLocked || lock.isDeviceLocked)return false
+            return try {
+                when(action){
+                    RegistryAction.SWIPE_LEFT,RegistryAction.SWIPE_RIGHT,RegistryAction.SWIPE_UP,RegistryAction.SWIPE_DOWN->
+                        service.doScroll(action.name.removePrefix("SWIPE_").lowercase(java.util.Locale.ROOT))
+                    RegistryAction.BACK->service.doBack()
+                    RegistryAction.HOME->service.performGlobalAction(android.accessibilityservice.AccessibilityService.GLOBAL_ACTION_HOME)
+                    RegistryAction.ZOOM_IN->service.doTransform(ZoomAction.IN,null)
+                    RegistryAction.ZOOM_OUT->service.doTransform(ZoomAction.OUT,null)
+                    RegistryAction.ROTATE_CW->service.doTransform(null,RotationAction.CLOCKWISE)
+                    RegistryAction.ROTATE_CCW->service.doTransform(null,RotationAction.COUNTERCLOCKWISE)
+                }
+            }catch(_:RuntimeException){false}
+        }
+
         internal fun performCustomScroll(direction:String):Boolean {
             val service=instance ?: return false
             if(aiActive() || zoomBusy() || dragBusy() || direction !in listOf("left","right","up","down")) return false

@@ -164,18 +164,19 @@ class YvoraService : LifecycleService() {
     private var ranges=HandRanges()
     private var dualMode=DualMode.NORMAL
     private var motionSlot=0
-    private var motionTemplates:Map<AiAction,MotionPattern> = emptyMap()
+    private var motionTemplates:Map<RegistryAction,MotionPattern> = emptyMap()
+    private var lastRegistryDispatch=-1L
     private val motionClutch=MotionClutch()
-    private var motionTraining:MotionTraining?=null
-    internal fun startMotionTraining(slot:Int,action:AiAction):Boolean {
-        if(!cameraRunning || !calibrationMode || slot !in 0..1 || action !in trajectoryActions || YvoraAccessibilityService.aiActive() || YvoraAccessibilityService.zoomBusy()) return false
-        motionTraining=MotionTraining(slot,action,SystemClock.uptimeMillis());return true
+    private var motionTraining:RegistryTraining?=null
+    internal fun startMotionTraining(slot:Int,action:RegistryAction):Boolean {
+        if(!cameraRunning || !calibrationMode || slot !in 0..1 || YvoraAccessibilityService.aiActive() || YvoraAccessibilityService.zoomBusy() || YvoraAccessibilityService.dragBusy()) return false
+        motionTraining=RegistryTraining(slot,action,SystemClock.uptimeMillis());return true
     }
     internal fun motionTrainingCount()=motionTraining?.count ?: 0
     internal fun motionTrainingStatus()=motionTraining?.status ?: "No active capture"
     internal fun motionTrainingActive()=motionTraining!=null
     internal fun cancelMotionTraining(){motionTraining=null}
-    internal fun finishMotionTraining():MotionPattern? {
+    internal fun finishMotionTraining():List<MotionPattern>? {
         val t=motionTraining ?: return null;motionTraining=null
         return if(cameraRunning && calibrationMode) t.finish(SystemClock.uptimeMillis()) else null
     }
@@ -323,7 +324,7 @@ class YvoraService : LifecycleService() {
         val requestedMode=CameraSettings.readDualMode(this)
         dualMode=if(!dualHandMode && requestedMode in listOf(DualMode.ZOOM,DualMode.ROTATE)) DualMode.NORMAL else requestedMode
         motionSlot=CameraSettings.readMotionSlot(this)
-        motionTemplates=CameraSettings.readMotions(this,motionSlot)
+        motionTemplates=CameraSettings.readRegistry(this,motionSlot)
         ranges=CameraSettings.readRanges(this)
         cursors.forEachIndexed { slot,cursor ->
             cursor.recognizer.setPersonalTemplate(CameraSettings.readPersonalPose(this,slot))
@@ -761,7 +762,7 @@ class YvoraService : LifecycleService() {
 
         if(dualMode==DualMode.CUSTOM) {
             val result=motionClutch.update(motionSample(motionSlot),now,motionAspect)
-            val match=result.pattern?.let{MotionSimilarity.choose(it,motionTemplates)}
+            val match=result.pattern?.let{GestureRegistry.choose(it,motionTemplates)}
             zoomDegree=match?.second ?: 0f
             zoomMessage=if(result.pattern!=null) {
                 if(match==null) "No unambiguous saved trajectory" else "Matched "+match.first.name
@@ -770,12 +771,12 @@ class YvoraService : LifecycleService() {
                 val state=states[i];val cursor=cursors[i]
                 cursor.armed=false;cursor.predictor.reset()
                 if(i==motionSlot && state.handDetected && !identityAmbiguous) {
-                    cursor.position(state.pointerX,state.pointerY,screenWidth,screenHeight);cursor.show()
+                    cursor.movePointer(state.pointerX,state.pointerY,screenWidth,screenHeight,thermalPolicy.warm || lowRamDevice,boostInference);cursor.show()
                 } else cursor.hide()
             }
-            if(match!=null) {
-                val direction=match.first.name.removePrefix("SWIPE_").lowercase(java.util.Locale.ROOT)
-                val ok=YvoraAccessibilityService.performCustomScroll(direction)
+            if(match!=null && (lastRegistryDispatch<0 || now-lastRegistryDispatch>=500L)) {
+                lastRegistryDispatch=now
+                val ok=YvoraAccessibilityService.performRegistryAction(match.first)
                 gestureDispatch=if(ok) "Custom "+match.first.name+" dispatched" else "Custom gesture rejected"
                 if(!ok) DiagnosticCounters.rejected()
             }
