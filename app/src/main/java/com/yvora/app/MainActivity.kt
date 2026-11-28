@@ -111,7 +111,11 @@ class MainActivity : LocalizedActivity() {
                     val rate = service.resultRate
                     txtResultRate.text = if (rate > 0f) String.format(java.util.Locale.ROOT, "%.1f", rate) + " /s" else "—"
                     txtFrameAge.text = if (service.frameAgeMs >= 0) "${service.frameAgeMs} ms" else "—"
-                    txtProfile.text = uiStatus(service.powerStatus)
+                    txtProfile.text = uiStatus(service.powerStatus)+"\n"+if(service.canvasActive) {
+                        val fps=service.cursorDrawRate
+                        localized("Canvas renderer • moving draw rate: ","محرك الرسم • معدل الرسم أثناء الحركة: ")+
+                            if(fps>0f) String.format(java.util.Locale.ROOT,"%.1f /s",fps) else "—"
+                    } else localized("Compatibility renderer","محرك العرض المتوافق")
                     btnStart.text = localized("ENGINE\nACTIVE","المحرك\nنشط")
                 }
             }
@@ -137,6 +141,13 @@ class MainActivity : LocalizedActivity() {
         bindViews()
         setupButtons()
         setupCalibration()
+        findViewById<Switch>(R.id.switchCanvasRenderer).apply {
+            isChecked=CameraSettings.readCanvasRenderer(this@MainActivity)
+            setOnCheckedChangeListener { _,enabled->
+                CameraSettings.saveCanvasRenderer(this@MainActivity,enabled)
+                toast(localized("Restart engine to apply cursor renderer.","أعد تشغيل المحرك لتطبيق محرك رسم المؤشر."))
+            }
+        }
         findViewById<Switch>(R.id.switchResponsiveCursor).apply {
             isChecked=CameraSettings.readResponsive(this@MainActivity)
             setOnCheckedChangeListener { _,enabled->

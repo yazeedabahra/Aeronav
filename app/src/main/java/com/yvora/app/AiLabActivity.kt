@@ -308,7 +308,7 @@ class AiLabActivity : LocalizedActivity() {
                 return@setOnClickListener
             }
             val state=YvoraService.instance?.diagnosticState() ?: "engine_running=false; live_metrics=unavailable"
-            val report="Yvora version 2.0.6-dev\n$state\n"+DiagnosticCounters.report()
+            val report="Yvora version 2.0.7-dev\n$state\n"+DiagnosticCounters.report()
             androidx.appcompat.app.AlertDialog.Builder(this)
                 .setTitle(localized("Send only this report to ${provider.title}?","إرسال هذا التقرير فقط إلى ${provider.title}؟"))
                 .setMessage(report+localized("\n\nAPI usage may cost money. No screenshots or raw logs are included.","\n\nقد تُحتسب تكلفة API. لا يتضمن التقرير لقطات شاشة أو سجلات خام."))

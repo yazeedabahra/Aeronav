@@ -19,6 +19,9 @@ internal class HandCursor(val slot:Int) {
     val predictor=FuzzyMotionPredictor()
     private val baseColor=if(slot==0) Color.rgb(56,189,248) else Color.rgb(250,180,65)
     private var view:View?=null
+    private var canvas:CursorCanvas?=null
+    private fun visible()=canvas?.isShown(slot) ?: (view?.visibility==View.VISIBLE)
+    fun attachCanvas(layer:CursorCanvas){canvas=layer;layer.setColor(slot,baseColor);lastColor=baseColor}
     private var params:WindowManager.LayoutParams?=null
     private var wm:WindowManager?=null
     private var half=0f
@@ -43,7 +46,7 @@ internal class HandCursor(val slot:Int) {
     private val renderCallback=object:Choreographer.FrameCallback {
         override fun doFrame(frameTimeNanos:Long) {
             renderPosted=false
-            if(view?.visibility!=View.VISIBLE || !glide.active){glide.cancel();return}
+            if(!visible() || !glide.active){glide.cancel();return}
             val now=SystemClock.uptimeMillis()
             if(lastRenderAt<0 || now-lastRenderAt>=renderGapMs-2L) {
                 glide.sample(now)?.let { pos->
@@ -107,7 +110,7 @@ internal class HandCursor(val slot:Int) {
         val gap=if(lastTargetAt<0) 90L else now-lastTargetAt
         lastTargetAt=now
         renderGapMs=if(lowPower) 33L else 16L
-        if(!initialized || view?.visibility!=View.VISIBLE || gap>350L){
+        if(!initialized || !visible() || gap>350L){
             glide.cancel();applyPosition(px,py);return
         }
         if(!glide.aim(x,y,px,py,now,gap,responsive)){
@@ -118,6 +121,8 @@ internal class HandCursor(val slot:Int) {
         scheduleRender()
     }
     private fun applyPosition(px:Float,py:Float){
+        val layer=canvas
+        if(layer!=null){x=px;y=py;initialized=true;layer.setPosition(slot,x,y);return}
         x=px.roundToInt().toFloat();y=py.roundToInt().toFloat();initialized=true
         val p=params ?: return
         val v=view ?: return
@@ -127,10 +132,11 @@ internal class HandCursor(val slot:Int) {
             try{wm?.updateViewLayout(v,p)}catch(_:RuntimeException){}
         }
     }
-    fun show() { if(initialized) view?.visibility=View.VISIBLE }
-    fun hide() { freezeMotion();view?.visibility=View.GONE }
+    fun show() { if(initialized){canvas?.setShown(slot,true);view?.visibility=View.VISIBLE} }
+    fun hide() { freezeMotion();canvas?.setShown(slot,false);view?.visibility=View.GONE }
     fun color(value:Int=baseColor) {
         if(lastColor==value) return
+        canvas?.setColor(slot,value)
         view?.findViewById<View>(R.id.innerDot)?.background=GradientDrawable().apply {
             shape=GradientDrawable.OVAL;setColor(value)
         }
@@ -144,6 +150,7 @@ internal class HandCursor(val slot:Int) {
     }
     fun remove() {
         freezeMotion()
+        canvas?.setShown(slot,false);canvas=null
         view?.let { try { wm?.removeView(it) } catch(_:RuntimeException) {} }
         view=null;params=null;wm=null
     }
