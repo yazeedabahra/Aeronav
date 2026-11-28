@@ -81,6 +81,12 @@ internal object PoseRegistry {
         }
         return result.distinct()
     }
+    fun validate(controls:Array<Map<ControlPose,PoseSignature>>,pairs:Map<RegistryAction,PairPose>):List<String>{
+        val issues=mutableListOf<String>()
+        for(i in 0..1)controls[i].forEach{(a,p)->issues.addAll(conflicts(a,listOf(p),controls[i],pairs,i))}
+        pairs.forEach{(a,p)->issues.addAll(pairConflicts(listOf(p),a,controls,pairs))}
+        return issues.distinct()
+    }
     fun choose(p:PoseSignature,templates:Map<ControlPose,PoseSignature>):ControlPose?{
         val ranked=templates.map{(a,b)->a to p.degree(b)}.sortedByDescending{it.second}
         val best=ranked.firstOrNull()?:return null

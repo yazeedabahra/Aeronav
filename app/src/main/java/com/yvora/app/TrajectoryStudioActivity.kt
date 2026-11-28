@@ -184,6 +184,11 @@ class TrajectoryStudioActivity: LocalizedActivity() {
                 val idx=pick.selectedItemPosition
                 androidx.appcompat.app.AlertDialog.Builder(this).setMessage(localized("Remove selected template and restore default behavior?","حذف النموذج المحدد واستعادة السلوك الافتراضي؟"))
                     .setNegativeButton(localized("Cancel","إلغاء"),null).setPositiveButton(localized("Delete","حذف")){_,_->
+                        val controls=Array(2){CameraSettings.readControls(this,it)}
+                        var pairMap=CameraSettings.readPairs(this)
+                        if(idx<3)controls[slot]=controls[slot]-ControlPose.values()[idx] else pairMap=pairMap-pairActions[idx-3]
+                        val conflicts=PoseRegistry.validate(controls,pairMap)
+                        if(conflicts.isNotEmpty()){message.text=localized("Restoring defaults conflicts with other saved poses. Remove those first: ","استعادة الافتراضي تتعارض مع وضعيات محفوظة. احذفها أولًا: ")+conflicts.joinToString(" / ");return@setPositiveButton}
                         if(idx<3)CameraSettings.saveControl(this,slot,ControlPose.values()[idx],null)
                         else CameraSettings.savePair(this,pairActions[idx-3],null)
                         dialog.dismiss();info.text=localized("Removed. Restart engine.","تم الحذف. أعد تشغيل المحرك.")

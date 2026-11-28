@@ -72,7 +72,8 @@ class GestureRecognizer {
     internal fun setPersonalTemplate(value:PoseFeatures?) { personalTemplate=value;fuzzyIntent.reset() }
     internal var poseSignature:PoseSignature?=null
         private set
-    internal fun clearLegacyIntent(){pinchDrag.reset();horizontalSwipe.trackingLost();currentGestureDirection=null;gestureStartTime=0L}
+    internal fun clearLegacySwipe(){horizontalSwipe.trackingLost();currentGestureDirection=null;gestureStartTime=0L}
+    internal fun clearLegacyIntent(){pinchDrag.reset();clearLegacySwipe()}
     internal var fuzzyTrace=FuzzyHandTrace()
         private set
 

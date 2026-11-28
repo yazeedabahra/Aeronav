@@ -172,6 +172,7 @@ class YvoraService : LifecycleService() {
     private val pairGate=PairGate()
     private var controlProfiles=Array<Map<ControlPose,PoseSignature>>(2){emptyMap()}
     private var pairProfiles:Map<RegistryAction,PairPose> = emptyMap()
+    private var unifiedConflicts:List<String> = emptyList()
     private var latestPoses=arrayOfNulls<PoseSignature>(2)
     private var previousPoses=arrayOfNulls<PoseSignature>(2)
     private var posesAt=-1L
@@ -342,6 +343,7 @@ class YvoraService : LifecycleService() {
         motionTemplates=CameraSettings.readRegistry(this,motionSlot)
         controlProfiles=Array(2){CameraSettings.readControls(this,it)}
         pairProfiles=CameraSettings.readPairs(this)
+        unifiedConflicts=PoseRegistry.validate(controlProfiles,pairProfiles)
         ranges=CameraSettings.readRanges(this)
         cursors.forEachIndexed { slot,cursor ->
             cursor.recognizer.setPersonalTemplate(CameraSettings.readPersonalPose(this,slot))
@@ -849,6 +851,13 @@ class YvoraService : LifecycleService() {
             return
         }
         if(dualMode==DualMode.UNIFIED) {
+            val lock=getSystemService(android.content.Context.KEYGUARD_SERVICE) as android.app.KeyguardManager
+            if(lock.isKeyguardLocked || lock.isDeviceLocked || !powerManager.isInteractive || unifiedConflicts.isNotEmpty()){
+                forceHidePointer()
+                statusListener?.onStatus(first!=null,"Unified input suspended",false,false,
+                    if(unifiedConflicts.isNotEmpty())unifiedConflicts.joinToString(" / ")else "Screen locked")
+                return
+            }
             // Do not interrupt an existing touch. Pair and trajectory modes reserve input only while idle.
             val busy=touchArbiter.owner!=null || YvoraAccessibilityService.dragBusy() || YvoraAccessibilityService.zoomBusy()
             val a=latestPoses[0];val b=latestPoses[1]
@@ -871,7 +880,7 @@ class YvoraService : LifecycleService() {
             val ringSample=if(!busy && motionTemplates.isNotEmpty() && pose!=null && pose.pinch>=.34f)
                 ZoomSample(state.rawX,state.rawY,state.isPointerMode || (pose.ring>=.42f && controlProfiles[motionSlot][ControlPose.POINTER]?.degree(pose)?.let{it>=.80f}==true),pose.ring,1f) else null
             val ringResult=ringClutch.update(ringSample,now,motionAspect)
-            if(wasRecording || ringClutch.recording || ringResult.pattern!=null){
+            if(wasRecording || ringClutch.recording || ringResult.pattern!=null || (ringSample!=null && ringSample.pinch<.23f)){
                 customTouch.forEach{it.reset()};cursors.forEach{it.freezeMotion();it.recognizer.clearLegacyIntent();it.armed=false}
                 val match=ringResult.pattern?.let{GestureRegistry.choose(it,motionTemplates)}
                 if(match!=null && (lastRegistryDispatch<0 || now-lastRegistryDispatch>=500L)){
@@ -886,16 +895,18 @@ class YvoraService : LifecycleService() {
                 if(profile.isEmpty())continue
                 val selected=sample?.let{PoseRegistry.choose(it,profile)}
                 val possible=sample?.let{p->profile.values.any{p.degree(it)>=PoseRegistry.CONFLICT}}==true
-                val pointer=if(ControlPose.POINTER in profile)selected==ControlPose.POINTER else raw.isPointerMode
+                val defaultNeutral=sample!=null && Integer.bitCount(sample.mask)>=4 && sample.pinch>=.34f && sample.edge<.46f
+                val pointer=if(ControlPose.POINTER in profile)selected==ControlPose.POINTER else raw.isPointerMode && !possible
+                val neutral=if(ControlPose.POINTER in profile)selected==ControlPose.POINTER else defaultNeutral && !possible
                 val customTouchEnabled=ControlPose.TAP in profile || ControlPose.DRAG in profile
                 if(customTouchEnabled){
                     val intent=when{
                         selected==ControlPose.TAP || selected==ControlPose.DRAG->selected
-                        !possible && sample!=null && sample.pinch<.23f && !raw.gestureArmed->
+                        !possible && sample!=null && sample.pinch<(if(customTouch[i].active).34f else .23f) && !raw.gestureArmed->
                             if(ControlPose.TAP !in profile)ControlPose.TAP else if(ControlPose.DRAG !in profile)ControlPose.DRAG else null
                         else->null
                     }
-                    val action=customTouch[i].update(intent,pointer && !possible || selected==ControlPose.POINTER,now,sample!=null,android.os.Build.VERSION.SDK_INT>=26)
+                    val action=customTouch[i].update(intent,neutral,now,sample!=null,android.os.Build.VERSION.SDK_INT>=26)
                     val reserved=possible || customTouch[i].active || action!=PinchAction.NONE
                     states[i]=raw.copy(isPointerMode=pointer && !customTouch[i].active && action==PinchAction.NONE,
                         isTapPinching=customTouch[i].active,pinchAction=action,triggeredTap=action==PinchAction.TAP,
@@ -906,7 +917,7 @@ class YvoraService : LifecycleService() {
                     states[i]=raw.copy(isPointerMode=pointer && raw.pinchAction==PinchAction.NONE,
                         gestureArmed=raw.gestureArmed && !reserved,triggeredGesture=if(reserved)null else raw.triggeredGesture)
                     // A trained pointer pose is distinct from the built-in pinch domain.
-                    if(reserved && raw.pinchAction==PinchAction.NONE)cursors[i].recognizer.clearLegacyIntent()
+                    if(reserved && raw.pinchAction==PinchAction.NONE)cursors[i].recognizer.clearLegacySwipe()
                 }
                 // A trained swipe replaces its original command; other defaults remain available.
             }
@@ -971,7 +982,7 @@ class YvoraService : LifecycleService() {
         if(candidates.size>1 || owner!=null && candidates.any { it.slot!=owner }) {
             conflictStatus=if(chosen==null) "Ambiguous competing actions: abstain" else "Hand ${if(chosen==0) "left" else "right"} owns action"
             candidates.filter{it.slot!=chosen}.forEach { losing ->
-                cursors[losing.slot].armed=false;cursors[losing.slot].freezeMotion();cursors[losing.slot].recognizer.reset();cursors[losing.slot].predictor.reset()
+                customTouch[losing.slot].reset();cursors[losing.slot].armed=false;cursors[losing.slot].freezeMotion();cursors[losing.slot].recognizer.reset();cursors[losing.slot].predictor.reset()
             }
         }
         val order=if(chosen==1) intArrayOf(1,0) else intArrayOf(0,1)
@@ -984,6 +995,7 @@ class YvoraService : LifecycleService() {
                         if(touchArbiter.owner!=i) {
                             if(YvoraAccessibilityService.dragBusy() || !touchArbiter.claim(i,now)) {
                                 cursor.armed=false
+                                customTouch[i].reset()
                                 cursor.recognizer.reset()
                                 continue
                             }
