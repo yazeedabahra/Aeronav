@@ -70,6 +70,9 @@ class GestureRecognizer {
     private var assistThreshold=.61f
     private var personalTemplate:PoseFeatures?=null
     internal fun setPersonalTemplate(value:PoseFeatures?) { personalTemplate=value;fuzzyIntent.reset() }
+    internal var poseSignature:PoseSignature?=null
+        private set
+    internal fun clearLegacyIntent(){pinchDrag.reset();horizontalSwipe.trackingLost();currentGestureDirection=null;gestureStartTime=0L}
     internal var fuzzyTrace=FuzzyHandTrace()
         private set
 
@@ -110,6 +113,7 @@ class GestureRecognizer {
         knifePose.reset()
         fuzzyIntent.reset()
         fuzzyTrace=FuzzyHandTrace()
+        poseSignature=null
     }
 
     // -------------------------------------------------------
@@ -135,6 +139,7 @@ class GestureRecognizer {
             knifePose.reset()
             fuzzyIntent.reset()
             fuzzyTrace=FuzzyHandTrace()
+        poseSignature=null
             return GestureState(
                 handDetected = false,
                 pinchAction = PinchAction.CANCEL,
@@ -188,6 +193,7 @@ class GestureRecognizer {
         }
         val edgePose = knifePose.update()
         val tapDist = geometry.pinchRatio()
+        poseSignature=PoseSignature(poseMask,tapDist.coerceIn(0f,2f),geometry.ringRatio().coerceIn(0f,2f),knifePose.edgeScore.coerceIn(0f,1f)).takeIf{it.valid()}
         val ownedBefore = pinchDrag.ownsPinch
         // Opt-in local fuzzy interpretation tolerates partially extended/rotated poses.
         // A close pinch and the normal face-on pointer are not treated as assisted swipes.

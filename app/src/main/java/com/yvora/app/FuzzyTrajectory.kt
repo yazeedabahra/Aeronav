@@ -61,6 +61,7 @@ internal data class MotionResult(val pattern:MotionPattern?=null,val status:Stri
  * No motion may survive loss of identity, stale frames, or a mode change. */
 internal class MotionClutch {
     private val points=ArrayList<MotionPoint>()
+    val recording get()=points.isNotEmpty()
     private var openCount=0
     private var armed=false
     private var last=-1L

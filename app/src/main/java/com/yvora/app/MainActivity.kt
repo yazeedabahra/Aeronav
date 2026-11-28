@@ -161,7 +161,7 @@ class MainActivity : LocalizedActivity() {
         }
         findViewById<android.widget.Spinner>(R.id.spinnerDualMode).apply {
             adapter=android.widget.ArrayAdapter(this@MainActivity,android.R.layout.simple_spinner_dropdown_item,
-                listOf(localized("Normal gestures","الإيماءات العادية"),localized("Zoom only (experimental)","التكبير فقط (تجريبي)"),localized("Rotate only (experimental)","التدوير فقط (تجريبي)"),localized("Custom gesture registry (experimental)","سجل الإيماءات المخصصة (تجريبي)")))
+                listOf(localized("Normal gestures","الإيماءات العادية"),localized("Zoom only (experimental)","التكبير فقط (تجريبي)"),localized("Rotate only (experimental)","التدوير فقط (تجريبي)"),localized("Custom gesture registry (experimental)","سجل الإيماءات المخصصة (تجريبي)"),localized("Unified gestures (experimental)","الإيماءات الموحّدة (تجريبي)")))
             setSelection(CameraSettings.readDualMode(this@MainActivity).ordinal)
             onItemSelectedListener=object:android.widget.AdapterView.OnItemSelectedListener {
                 override fun onNothingSelected(parent:android.widget.AdapterView<*>?) {}

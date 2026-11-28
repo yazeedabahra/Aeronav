@@ -99,6 +99,22 @@ internal object CameraSettings {
         e.apply()
     }
 
+    fun readControls(context:Context,slot:Int)=ControlPose.values().mapNotNull{a->
+        PoseSignature.decode(prefs(context).getString("control_${slot}_${a.name}",null))?.let{a to it}
+    }.toMap()
+    fun saveControl(context:Context,slot:Int,action:ControlPose,pose:PoseSignature?){
+        val e=prefs(context).edit();val key="control_${slot}_${action.name}"
+        if(pose==null)e.remove(key)else if(pose.eligible())e.putString(key,pose.encode())else return
+        e.apply()
+    }
+    fun readPairs(context:Context)=pairActions.mapNotNull{a->PairPose.decode(prefs(context).getString("pair_${a.name}",null))?.let{a to it}}.toMap()
+    fun savePair(context:Context,action:RegistryAction,pose:PairPose?){
+        if(action !in pairActions)return
+        val e=prefs(context).edit();val key="pair_${action.name}"
+        if(pose==null)e.remove(key)else if(pose.left.eligible() && pose.right.eligible())e.putString(key,pose.encode())else return
+        e.apply()
+    }
+
     fun readMotionSlot(context:Context)=prefs(context).getInt("motion_slot",0).coerceIn(0,1)
     fun saveMotionSlot(context:Context,slot:Int){prefs(context).edit().putInt("motion_slot",slot.coerceIn(0,1)).apply()}
     fun readMotion(context:Context,slot:Int,action:AiAction):MotionPattern? {

@@ -167,6 +167,20 @@ class YvoraService : LifecycleService() {
     private var motionTemplates:Map<RegistryAction,MotionPattern> = emptyMap()
     private var lastRegistryDispatch=-1L
     private val motionClutch=MotionClutch()
+    private val ringClutch=MotionClutch()
+    private val customTouch=Array(2){PoseTouch()}
+    private val pairGate=PairGate()
+    private var controlProfiles=Array<Map<ControlPose,PoseSignature>>(2){emptyMap()}
+    private var pairProfiles:Map<RegistryAction,PairPose> = emptyMap()
+    private var latestPoses=arrayOfNulls<PoseSignature>(2)
+    private var previousPoses=arrayOfNulls<PoseSignature>(2)
+    private var posesAt=-1L
+    internal fun stablePose(slot:Int):PoseSignature? {
+        if(!cameraRunning || !calibrationMode || slot !in 0..1 || posesAt<0 || SystemClock.uptimeMillis()-posesAt>350L)return null
+        val a=latestPoses[slot]?:return null;val b=previousPoses[slot]?:return null
+        return a.takeIf{it.eligible() && it.degree(b)>=.80f}
+    }
+    private fun resetUnified(){ringClutch.reset();pairGate.reset();customTouch.forEach{it.reset()};latestPoses.fill(null);previousPoses.fill(null);posesAt=-1}
     private var motionTraining:RegistryTraining?=null
     internal fun startMotionTraining(slot:Int,action:RegistryAction):Boolean {
         if(!cameraRunning || !calibrationMode || slot !in 0..1 || YvoraAccessibilityService.aiActive() || YvoraAccessibilityService.zoomBusy() || YvoraAccessibilityService.dragBusy()) return false
@@ -326,6 +340,8 @@ class YvoraService : LifecycleService() {
         dualMode=if(!dualHandMode && requestedMode in listOf(DualMode.ZOOM,DualMode.ROTATE)) DualMode.NORMAL else requestedMode
         motionSlot=CameraSettings.readMotionSlot(this)
         motionTemplates=CameraSettings.readRegistry(this,motionSlot)
+        controlProfiles=Array(2){CameraSettings.readControls(this,it)}
+        pairProfiles=CameraSettings.readPairs(this)
         ranges=CameraSettings.readRanges(this)
         cursors.forEachIndexed { slot,cursor ->
             cursor.recognizer.setPersonalTemplate(CameraSettings.readPersonalPose(this,slot))
@@ -437,7 +453,7 @@ class YvoraService : LifecycleService() {
     }
 
     fun forceHidePointer() {
-        motionClutch.reset();zoomEngine.reset();rotationEngine.reset();zoomDegree=0f;zoomMessage=if(dualMode!=DualMode.NORMAL) "Open both palms to arm" else "Off"
+        resetUnified();motionClutch.reset();zoomEngine.reset();rotationEngine.reset();zoomDegree=0f;zoomMessage=if(dualMode!=DualMode.NORMAL) "Open both palms to arm" else "Off"
         cancelDrag()
         cursors.forEach { it.reset() }
     }
@@ -693,12 +709,16 @@ class YvoraService : LifecycleService() {
         val assignment=identification.indices
         identityDegrees=identification.degrees;identityAmbiguous=identification.ambiguous
         predictionDegrees.fill(0f);conflictStatus="None"
-        val states=cursors.mapIndexed { slot,cursor ->
+        val originalStates=cursors.mapIndexed { slot,cursor ->
             cursor.recognizer.setResponsivePointer(boostInference)
             cursor.recognizer.processResult(result,width,height,handIndex=assignment[slot],frameAgeMs=frameAgeMs)
         }
         fuzzyTraces=Array(2){ cursors[it].recognizer.fuzzyTrace }
         lastFuzzyAt=now
+        previousPoses=if(posesAt>=0 && now-posesAt<=350L)latestPoses else arrayOfNulls(2)
+        latestPoses=Array(2){i->cursors[i].recognizer.poseSignature?.takeIf{!identityAmbiguous && FuzzyCore.and(fuzzyTraces[i].quality,identityDegrees[i])>=.60f}}
+        posesAt=now
+        val states=originalStates.toMutableList()
         fun motionSample(slot:Int):ZoomSample? {
             val state=states[slot];val tr=fuzzyTraces[slot]
             return if(state.handDetected && !identityAmbiguous) ZoomSample(state.rawX,state.rawY,state.isPointerMode,tr.pinchRatio,FuzzyCore.and(tr.quality,identityDegrees[slot])) else null
@@ -742,7 +762,7 @@ class YvoraService : LifecycleService() {
         }
         analysisWidth=width;analysisHeight=height
         if(YvoraAccessibilityService.aiActive()) {
-            motionClutch.reset();zoomEngine.reset();rotationEngine.reset();zoomDegree=0f
+            resetUnified();motionClutch.reset();zoomEngine.reset();rotationEngine.reset();zoomDegree=0f
             // Explicit pinch or recognized swipe interrupts running AI, never injects a competing stroke.
             if(!calibrationMode && YvoraAccessibilityService.aiRunning() && detected.any { it.pinchAction==PinchAction.PENDING || it.triggeredGesture!=null }) {
                 YvoraAccessibilityService.stopAi("AI stopped by manual gesture")
@@ -787,7 +807,7 @@ class YvoraService : LifecycleService() {
             return
         }
 
-        if(dualMode!=DualMode.NORMAL) {
+        if(dualMode!=DualMode.NORMAL && dualMode!=DualMode.UNIFIED) {
             // Dedicated mode: never let either individual recognizer inject a tap/drag/swipe.
             fun zoomSample(slot:Int):ZoomSample? {
                 val state=states[slot];val tr=fuzzyTraces[slot]
@@ -827,6 +847,74 @@ class YvoraService : LifecycleService() {
             conflictStatus="Identity ambiguous: input suspended"
             statusListener?.onStatus(false,"Identity uncertain",false,false,"Separate hands; open palm to re-arm")
             return
+        }
+        if(dualMode==DualMode.UNIFIED) {
+            // Do not interrupt an existing touch. Pair and trajectory modes reserve input only while idle.
+            val busy=touchArbiter.owner!=null || YvoraAccessibilityService.dragBusy() || YvoraAccessibilityService.zoomBusy()
+            val a=latestPoses[0];val b=latestPoses[1]
+            val pair=if(a!=null && b!=null)PairPose(a,b)else null
+            val neutralPair=states.all{it.handDetected && it.isPointerMode}
+            val pairAction=if(!busy && dualHandMode)pairGate.update(pair,pairProfiles,neutralPair,now)else {pairGate.reset();null}
+            if(pairGate.reserved){
+                ringClutch.reset();customTouch.forEach{it.reset()}
+                cursors.forEach{it.freezeMotion();it.recognizer.clearLegacyIntent();it.armed=false}
+                if(pairAction!=null && (lastRegistryDispatch<0 || now-lastRegistryDispatch>=500L)){
+                    lastRegistryDispatch=now
+                    if(!YvoraAccessibilityService.performRegistryAction(pairAction))DiagnosticCounters.rejected()
+                }
+                statusListener?.onStatus(first!=null,"Unified pair",false,true,pairAction?.title() ?: "Pair pose reserved")
+                return
+            }
+            val pose=latestPoses[motionSlot];val state=states[motionSlot]
+            val wasRecording=ringClutch.recording
+            // Distinct thumb-to-ring clutch; index must stay open. No normal pinch/tap during capture.
+            val ringSample=if(!busy && motionTemplates.isNotEmpty() && pose!=null && pose.pinch>=.34f)
+                ZoomSample(state.rawX,state.rawY,state.isPointerMode || (pose.ring>=.42f && controlProfiles[motionSlot][ControlPose.POINTER]?.degree(pose)?.let{it>=.80f}==true),pose.ring,1f) else null
+            val ringResult=ringClutch.update(ringSample,now,motionAspect)
+            if(wasRecording || ringClutch.recording || ringResult.pattern!=null){
+                customTouch.forEach{it.reset()};cursors.forEach{it.freezeMotion();it.recognizer.clearLegacyIntent();it.armed=false}
+                val match=ringResult.pattern?.let{GestureRegistry.choose(it,motionTemplates)}
+                if(match!=null && (lastRegistryDispatch<0 || now-lastRegistryDispatch>=500L)){
+                    lastRegistryDispatch=now
+                    if(!YvoraAccessibilityService.performRegistryAction(match.first))DiagnosticCounters.rejected()
+                }
+                statusListener?.onStatus(first!=null,"Unified motion",false,true,match?.first?.title() ?: ringResult.status)
+                return
+            }
+            for(i in 0..1){
+                val raw=states[i];val sample=latestPoses[i];val profile=controlProfiles[i]
+                if(profile.isEmpty())continue
+                val selected=sample?.let{PoseRegistry.choose(it,profile)}
+                val possible=sample?.let{p->profile.values.any{p.degree(it)>=PoseRegistry.CONFLICT}}==true
+                val pointer=if(ControlPose.POINTER in profile)selected==ControlPose.POINTER else raw.isPointerMode
+                val customTouchEnabled=ControlPose.TAP in profile || ControlPose.DRAG in profile
+                if(customTouchEnabled){
+                    val intent=when{
+                        selected==ControlPose.TAP || selected==ControlPose.DRAG->selected
+                        !possible && sample!=null && sample.pinch<.23f && !raw.gestureArmed->
+                            if(ControlPose.TAP !in profile)ControlPose.TAP else if(ControlPose.DRAG !in profile)ControlPose.DRAG else null
+                        else->null
+                    }
+                    val action=customTouch[i].update(intent,pointer && !possible || selected==ControlPose.POINTER,now,sample!=null,android.os.Build.VERSION.SDK_INT>=26)
+                    val reserved=possible || customTouch[i].active || action!=PinchAction.NONE
+                    states[i]=raw.copy(isPointerMode=pointer && !customTouch[i].active && action==PinchAction.NONE,
+                        isTapPinching=customTouch[i].active,pinchAction=action,triggeredTap=action==PinchAction.TAP,
+                        gestureArmed=raw.gestureArmed && !reserved,triggeredGesture=if(reserved)null else raw.triggeredGesture)
+                    if(reserved)cursors[i].recognizer.clearLegacyIntent()
+                } else {
+                    val reserved=possible
+                    states[i]=raw.copy(isPointerMode=pointer && raw.pinchAction==PinchAction.NONE,
+                        gestureArmed=raw.gestureArmed && !reserved,triggeredGesture=if(reserved)null else raw.triggeredGesture)
+                    // A trained pointer pose is distinct from the built-in pinch domain.
+                    if(reserved && raw.pinchAction==PinchAction.NONE)cursors[i].recognizer.clearLegacyIntent()
+                }
+                // A trained swipe replaces its original command; other defaults remain available.
+            }
+            for(i in 0..1){
+                val direction=states[i].triggeredGesture
+                if(i==motionSlot && direction!=null && motionTemplates.keys.any{it.name=="SWIPE_"+direction})
+                    states[i]=states[i].copy(triggeredGesture=null,gestureArmed=false)
+            }
         }
         // Handle lost ownership before any new action. Never switch a held touch to another hand.
         touchArbiter.owner?.let { slot ->
@@ -874,7 +962,7 @@ class YvoraService : LifecycleService() {
             val state=states[i];val tr=fuzzyTraces[i]
             if(!state.handDetected || !previouslyArmed[i] || !cursors[i].armed) null
             else if(state.pinchAction==PinchAction.PENDING) IntentCandidate(i,true,
-                FuzzyCore.and(tr.quality,FuzzyCore.fall(tr.pinchRatio,.12f,.34f)))
+                FuzzyCore.and(tr.quality,if(dualMode==DualMode.UNIFIED && customTouch[i].active) .90f else FuzzyCore.fall(tr.pinchRatio,.12f,.34f)))
             else if(state.triggeredGesture!=null) IntentCandidate(i,false,
                 FuzzyCore.and(tr.quality,if(state.triggeredGesture=="LEFT" || state.triggeredGesture=="RIGHT") tr.swipe else .8f))
             else null
