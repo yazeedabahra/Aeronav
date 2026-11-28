@@ -79,6 +79,9 @@ class YvoraService : LifecycleService() {
     // FIELDS
     // -------------------------------------------------------
     private val cursors = Array(2) { HandCursor(it) }
+    private var cursorCanvas:CursorCanvas?=null
+    val canvasActive:Boolean get()=cursorCanvas!=null
+    val cursorDrawRate:Float get()=cursorCanvas?.drawRate(SystemClock.uptimeMillis()) ?: 0f
     private val touchArbiter = TouchArbiter()
     private var dualHandMode = true
 
@@ -127,7 +130,7 @@ class YvoraService : LifecycleService() {
         }
     }
 
-     internal fun diagnosticState(): String = "engine_running=$cameraRunning; calibration=$calibrationMode; thermal_status=${if (Build.VERSION.SDK_INT >= 29) thermalLevel.toString() else "unavailable"}; battery_temp_tenths_c=${batteryTenths ?: "unavailable"}; analysis_target_ms=$analysisIntervalMs; analysis_resolution=${analysisWidth}x$analysisHeight; distance_detail=$usingDistanceDetail; accessibility_connected=${YvoraAccessibilityService.isEnabled()}"
+     internal fun diagnosticState(): String = "engine_running=$cameraRunning; calibration=$calibrationMode; thermal_status=${if (Build.VERSION.SDK_INT >= 29) thermalLevel.toString() else "unavailable"}; battery_temp_tenths_c=${batteryTenths ?: "unavailable"}; analysis_target_ms=$analysisIntervalMs; analysis_resolution=${analysisWidth}x$analysisHeight; distance_detail=$usingDistanceDetail; accessibility_connected=${YvoraAccessibilityService.isEnabled()}; cursor_canvas=$canvasActive; cursor_draws_per_second=${cursorDrawRate.toInt()}; cursor_draw_gap_ms=${cursorCanvas?.lastDrawGapMs ?: 0}; tracking_results_per_second=${resultRate.toInt()}; frame_age_ms=$frameAgeMs"
     var gestureDispatch = "No command yet"
         private set
     var screenWidth = 0
@@ -161,18 +164,19 @@ class YvoraService : LifecycleService() {
     private var ranges=HandRanges()
     private var dualMode=DualMode.NORMAL
     private var motionSlot=0
-    private var motionTemplates:Map<AiAction,MotionPattern> = emptyMap()
+    private var motionTemplates:Map<RegistryAction,MotionPattern> = emptyMap()
+    private var lastRegistryDispatch=-1L
     private val motionClutch=MotionClutch()
-    private var motionTraining:MotionTraining?=null
-    internal fun startMotionTraining(slot:Int,action:AiAction):Boolean {
-        if(!cameraRunning || !calibrationMode || slot !in 0..1 || action !in trajectoryActions || YvoraAccessibilityService.aiActive() || YvoraAccessibilityService.zoomBusy()) return false
-        motionTraining=MotionTraining(slot,action,SystemClock.uptimeMillis());return true
+    private var motionTraining:RegistryTraining?=null
+    internal fun startMotionTraining(slot:Int,action:RegistryAction):Boolean {
+        if(!cameraRunning || !calibrationMode || slot !in 0..1 || YvoraAccessibilityService.aiActive() || YvoraAccessibilityService.zoomBusy() || YvoraAccessibilityService.dragBusy()) return false
+        motionTraining=RegistryTraining(slot,action,SystemClock.uptimeMillis());return true
     }
     internal fun motionTrainingCount()=motionTraining?.count ?: 0
     internal fun motionTrainingStatus()=motionTraining?.status ?: "No active capture"
     internal fun motionTrainingActive()=motionTraining!=null
     internal fun cancelMotionTraining(){motionTraining=null}
-    internal fun finishMotionTraining():MotionPattern? {
+    internal fun finishMotionTraining():List<MotionPattern>? {
         val t=motionTraining ?: return null;motionTraining=null
         return if(cameraRunning && calibrationMode) t.finish(SystemClock.uptimeMillis()) else null
     }
@@ -287,6 +291,7 @@ class YvoraService : LifecycleService() {
     private fun recordTelemetry(frameTime: Long) {
         val now = SystemClock.uptimeMillis()
         frameAgeMs = (now - frameTime).coerceAtLeast(0L)
+        LocalPerformance.frame(frameAgeMs,now)
         if (rateWindowStart < 0L) {
             rateWindowStart = now
             rateWindowCount = 0
@@ -320,7 +325,7 @@ class YvoraService : LifecycleService() {
         val requestedMode=CameraSettings.readDualMode(this)
         dualMode=if(!dualHandMode && requestedMode in listOf(DualMode.ZOOM,DualMode.ROTATE)) DualMode.NORMAL else requestedMode
         motionSlot=CameraSettings.readMotionSlot(this)
-        motionTemplates=CameraSettings.readMotions(this,motionSlot)
+        motionTemplates=CameraSettings.readRegistry(this,motionSlot)
         ranges=CameraSettings.readRanges(this)
         cursors.forEachIndexed { slot,cursor ->
             cursor.recognizer.setPersonalTemplate(CameraSettings.readPersonalPose(this,slot))
@@ -378,6 +383,7 @@ class YvoraService : LifecycleService() {
     }
 
     override fun onDestroy() {
+        LocalPerformance.stop(SystemClock.uptimeMillis())
         stopped = true
         YvoraAccessibilityService.stopAi("Yvora engine stopped")
         if (receiverRegistered) {
@@ -406,6 +412,7 @@ class YvoraService : LifecycleService() {
         cameraExecutor.shutdown()
 
         cursors.forEach { it.remove() }
+        cursorCanvas?.detach();cursorCanvas=null
 
         if (instance === this) {
             instance = null
@@ -420,6 +427,12 @@ class YvoraService : LifecycleService() {
     private fun setupOverlayWindows() {
         if (!Settings.canDrawOverlays(this)) return
         val manager=getSystemService(WINDOW_SERVICE) as WindowManager
+        if(CameraSettings.readCanvasRenderer(this)) {
+            val layer=CursorCanvas(this)
+            if(layer.attach(manager)){
+                cursorCanvas=layer;cursors.forEach{it.attachCanvas(layer)};return
+            }
+        }
         cursors.forEach { it.attach(this,manager) }
     }
 
@@ -494,6 +507,7 @@ class YvoraService : LifecycleService() {
             thermalPolicy.cooling -> "Cooling • Camera paused"
             else -> null
         }
+        LocalPerformance.sample(now,cursorDrawRate,batteryTenths,thermalPolicy.warm,reason!=null)
         val changed = reason != pauseReason
         pauseReason = reason
         if (reason != null) {
@@ -751,7 +765,7 @@ class YvoraService : LifecycleService() {
 
         if(dualMode==DualMode.CUSTOM) {
             val result=motionClutch.update(motionSample(motionSlot),now,motionAspect)
-            val match=result.pattern?.let{MotionSimilarity.choose(it,motionTemplates)}
+            val match=result.pattern?.let{GestureRegistry.choose(it,motionTemplates)}
             zoomDegree=match?.second ?: 0f
             zoomMessage=if(result.pattern!=null) {
                 if(match==null) "No unambiguous saved trajectory" else "Matched "+match.first.name
@@ -760,12 +774,12 @@ class YvoraService : LifecycleService() {
                 val state=states[i];val cursor=cursors[i]
                 cursor.armed=false;cursor.predictor.reset()
                 if(i==motionSlot && state.handDetected && !identityAmbiguous) {
-                    cursor.position(state.pointerX,state.pointerY,screenWidth,screenHeight);cursor.show()
+                    cursor.movePointer(state.pointerX,state.pointerY,screenWidth,screenHeight,thermalPolicy.warm || lowRamDevice,boostInference);cursor.show()
                 } else cursor.hide()
             }
-            if(match!=null) {
-                val direction=match.first.name.removePrefix("SWIPE_").lowercase(java.util.Locale.ROOT)
-                val ok=YvoraAccessibilityService.performCustomScroll(direction)
+            if(match!=null && (lastRegistryDispatch<0 || now-lastRegistryDispatch>=500L)) {
+                lastRegistryDispatch=now
+                val ok=YvoraAccessibilityService.performRegistryAction(match.first)
                 gestureDispatch=if(ok) "Custom "+match.first.name+" dispatched" else "Custom gesture rejected"
                 if(!ok) DiagnosticCounters.rejected()
             }

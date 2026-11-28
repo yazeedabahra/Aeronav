@@ -51,6 +51,9 @@ internal object CameraSettings {
         e.apply()
     }
 
+    fun readCanvasRenderer(context:Context):Boolean=prefs(context).getBoolean("canvas_renderer",true)
+    fun saveCanvasRenderer(context:Context,enabled:Boolean){prefs(context).edit().putBoolean("canvas_renderer",enabled).apply()}
+
     fun readResponsive(context:Context):Boolean=prefs(context).getBoolean("responsive_cursor",true)
     fun saveResponsive(context:Context,enabled:Boolean){prefs(context).edit().putBoolean("responsive_cursor",enabled).apply()}
 
@@ -66,6 +69,34 @@ internal object CameraSettings {
     }
     fun saveDualMode(context:Context,value:DualMode) {
         prefs(context).edit().putString("dual_transform_mode",value.name).putBoolean("zoom_mode",value==DualMode.ZOOM).apply()
+    }
+
+    // New keys retain old swipe templates on upgrade, without modifying the AI allowlist.
+    fun readRegistry(context:Context,slot:Int):Map<RegistryAction,MotionPattern> {
+        val p=prefs(context)
+        return RegistryAction.values().mapNotNull{ action->
+            val raw=p.getString("registry_${slot}_${action.name}",null)
+            val parsed=raw?.let{
+                val parts=it.split(',')
+                if(parts.size!=33)null else {
+                    val duration=parts.first().toLongOrNull()
+                    val values=parts.drop(1).mapNotNull{v->v.toFloatOrNull()}
+                    if(duration==null)null else MotionPattern(values,duration).takeIf{v->v.valid()}
+                }
+            }
+            val legacy=if(raw==null) AiAction.values().firstOrNull{it.name==action.name && it in trajectoryActions}?.let{readMotion(context,slot,it)} else null
+            (parsed ?: legacy)?.let{action to it}
+        }.toMap()
+    }
+    fun saveRegistry(context:Context,slot:Int,action:RegistryAction,pattern:MotionPattern?){
+        require(slot in 0..1)
+        val key="registry_${slot}_${action.name}"
+        val e=prefs(context).edit()
+        // Tombstone prevents resurrection of an older migrated template.
+        if(pattern==null)e.putString(key,"deleted")
+        else if(pattern.valid())e.putString(key,pattern.duration.toString()+","+pattern.values.joinToString(","))
+        else return
+        e.apply()
     }
 
     fun readMotionSlot(context:Context)=prefs(context).getInt("motion_slot",0).coerceIn(0,1)
