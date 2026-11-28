@@ -111,7 +111,11 @@ class MainActivity : LocalizedActivity() {
                     val rate = service.resultRate
                     txtResultRate.text = if (rate > 0f) String.format(java.util.Locale.ROOT, "%.1f", rate) + " /s" else "—"
                     txtFrameAge.text = if (service.frameAgeMs >= 0) "${service.frameAgeMs} ms" else "—"
-                    txtProfile.text = uiStatus(service.powerStatus)
+                    txtProfile.text = uiStatus(service.powerStatus)+"\n"+if(service.canvasActive) {
+                        val fps=service.cursorDrawRate
+                        localized("Canvas renderer • moving draw rate: ","محرك الرسم • معدل الرسم أثناء الحركة: ")+
+                            if(fps>0f) String.format(java.util.Locale.ROOT,"%.1f /s",fps) else "—"
+                    } else localized("Compatibility renderer","محرك العرض المتوافق")
                     btnStart.text = localized("ENGINE\nACTIVE","المحرك\nنشط")
                 }
             }
@@ -137,6 +141,13 @@ class MainActivity : LocalizedActivity() {
         bindViews()
         setupButtons()
         setupCalibration()
+        findViewById<Switch>(R.id.switchCanvasRenderer).apply {
+            isChecked=CameraSettings.readCanvasRenderer(this@MainActivity)
+            setOnCheckedChangeListener { _,enabled->
+                CameraSettings.saveCanvasRenderer(this@MainActivity,enabled)
+                toast(localized("Restart engine to apply cursor renderer.","أعد تشغيل المحرك لتطبيق محرك رسم المؤشر."))
+            }
+        }
         findViewById<Switch>(R.id.switchResponsiveCursor).apply {
             isChecked=CameraSettings.readResponsive(this@MainActivity)
             setOnCheckedChangeListener { _,enabled->
@@ -150,7 +161,7 @@ class MainActivity : LocalizedActivity() {
         }
         findViewById<android.widget.Spinner>(R.id.spinnerDualMode).apply {
             adapter=android.widget.ArrayAdapter(this@MainActivity,android.R.layout.simple_spinner_dropdown_item,
-                listOf(localized("Normal gestures","الإيماءات العادية"),localized("Zoom only (experimental)","التكبير فقط (تجريبي)"),localized("Rotate only (experimental)","التدوير فقط (تجريبي)"),localized("Custom trajectories (experimental)","مسارات مخصصة (تجريبي)")))
+                listOf(localized("Normal gestures","الإيماءات العادية"),localized("Zoom only (experimental)","التكبير فقط (تجريبي)"),localized("Rotate only (experimental)","التدوير فقط (تجريبي)"),localized("Custom gesture registry (experimental)","سجل الإيماءات المخصصة (تجريبي)"),localized("Unified gestures (experimental)","الإيماءات الموحّدة (تجريبي)")))
             setSelection(CameraSettings.readDualMode(this@MainActivity).ordinal)
             onItemSelectedListener=object:android.widget.AdapterView.OnItemSelectedListener {
                 override fun onNothingSelected(parent:android.widget.AdapterView<*>?) {}
@@ -182,6 +193,7 @@ class MainActivity : LocalizedActivity() {
         findViewById<Button>(R.id.btnPersonalStudio).setOnClickListener { startActivity(Intent(this,PersonalGestureActivity::class.java)) }
         findViewById<Button>(R.id.btnFuzzyLab).setOnClickListener { startActivity(Intent(this,FuzzyLabActivity::class.java)) }
         findViewById<Button>(R.id.btnAiCore).setOnClickListener { startActivity(Intent(this, AiLabActivity::class.java)) }
+        findViewById<Button>(R.id.btnPerformanceSession).setOnClickListener { showPerformanceSession() }
         findViewById<Button>(R.id.btnTutorial).setOnClickListener {
             startActivity(Intent(this,TutorialActivity::class.java))
         }
@@ -207,6 +219,30 @@ class MainActivity : LocalizedActivity() {
             YvoraService.instance?.setCalibrationMode(true)
         }
         YvoraService.statusListener = null
+    }
+
+    private fun showPerformanceSession(){
+        val now=android.os.SystemClock.uptimeMillis()
+        val snapshot=LocalPerformance.snapshot(now)
+        fun number(n:Double?)=n?.let{String.format(java.util.Locale.ROOT,"%.1f",it)} ?: "—"
+        val message=if(snapshot==null) localized("Start the engine, then start a local performance session. Move your hand in ordinary apps. The session records aggregate metrics for up to 30 minutes; you can stop earlier.","شغّل المحرك ثم ابدأ جلسة أداء محلية. حرّك يدك في التطبيقات العادية. تسجل الجلسة قياسات مجمعة لمدة تصل إلى 30 دقيقة ويمكن إيقافها مبكرًا.")
+        else {
+            val status=if(snapshot.active)localized("Running","جارية")else localized("Finished","منتهية")
+            val seconds=snapshot.elapsed/1000
+            val peak=snapshot.peakTemp?.let{number(it/10.0)+" °C"} ?: "—"
+            localized("Status: $status • ${seconds}s\nDelivered frames: ${snapshot.frames}\nMean frame age: ${number(snapshot.meanAge)} ms\nApprox. P95 age: ${snapshot.p95Age ?: "—"} ms\nMean sampled moving draw rate: ${number(snapshot.meanDraw)} /s (n=${snapshot.drawSamples})\nPeak battery temperature: $peak\nWarm samples: ${snapshot.warmSamples}/${snapshot.samples}\nPaused samples: ${snapshot.pausedSamples}/${snapshot.samples}",
+                "الحالة: $status • $seconds ثانية\nالإطارات المستلمة: ${snapshot.frames}\nمتوسط عمر الإطار: ${number(snapshot.meanAge)} ms\nعمر الإطار P95 تقريبي: ${snapshot.p95Age ?: "—"} ms\nمتوسط عينات معدل الرسم أثناء الحركة: ${number(snapshot.meanDraw)} /ث (عدد العينات ${snapshot.drawSamples})\nأعلى حرارة بطارية: $peak\nعينات الحرارة المرتفعة: ${snapshot.warmSamples}/${snapshot.samples}\nعينات التوقف: ${snapshot.pausedSamples}/${snapshot.samples}")
+        }
+        val dialog=androidx.appcompat.app.AlertDialog.Builder(this)
+            .setTitle(localized("Local performance test","اختبار الأداء المحلي"))
+            .setMessage(message+"\n\n"+localized("Frame age is processing/delivery latency, not total hand-to-display latency. Draw samples are not screen refresh rate. Metrics stay in memory and reset on a new session or process exit.","عمر الإطار هو زمن المعالجة والتسليم وليس كامل زمن الاستجابة. عينات الرسم ليست معدل تحديث الشاشة. تبقى النتائج في الذاكرة وتُصفّر عند بدء جلسة جديدة أو خروج العملية."))
+            .setNegativeButton(localized("Close","إغلاق"),null)
+        if(snapshot?.active==true)dialog.setNeutralButton(localized("Stop test","إيقاف الاختبار")){_,_->LocalPerformance.stop(android.os.SystemClock.uptimeMillis());showPerformanceSession()}
+        else dialog.setPositiveButton(localized("Start new test","بدء اختبار جديد")){_,_->
+            if(YvoraService.instance==null)toast(localized("Start engine first.","شغّل المحرك أولًا."))
+            else {LocalPerformance.start(android.os.SystemClock.uptimeMillis());toast(localized("Local test started. Use Yvora normally.","بدأ الاختبار المحلي. استخدم Yvora كالمعتاد."))}
+        }
+        dialog.show()
     }
 
     private fun bindViews() {

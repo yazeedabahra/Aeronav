@@ -15,6 +15,7 @@ internal class HandPoseGeometry {
         hypot(xy[a*2] - xy[b*2], xy[a*2+1] - xy[b*2+1])
     fun palmSize(): Float = maxOf(d(5, 17), d(0, 9), 1f)
     fun pinchRatio(): Float = d(4, 8) / palmSize()
+    fun ringRatio(): Float = d(4, 16) / palmSize()
     // Cosine between consecutive forward segments: +1 means straight.
     private fun straight(a: Int, b: Int, c: Int): Float {
         val ux = xy[b*2] - xy[a*2]; val uy = xy[b*2+1] - xy[a*2+1]
